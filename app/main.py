@@ -60,12 +60,15 @@ app = FastAPI(
 )
 
 # Add CORS middleware
+# Configure allowed origins from environment or use secure defaults
+allowed_origins = settings.cors_origins.split(",") if hasattr(settings, 'cors_origins') and settings.cors_origins else ["http://localhost:8000", "https://localhost:8000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: Configure appropriately for production
+    allow_origins=allowed_origins,  # Restricted to specific origins
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Specific methods only
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],  # Specific headers only
 )
 
 

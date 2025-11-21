@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    # CORS
+    cors_origins: Optional[str] = None  # Comma-separated list of allowed origins
+
     class Config:
         env_file = ".env"
         case_sensitive = False
