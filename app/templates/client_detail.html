@@ -10,6 +10,9 @@
             <p class="mt-2 text-gray-600">Client configuration and statistics</p>
         </div>
         <div class="flex space-x-3">
+            <button onclick="openTestEmailModal()" class="btn px-4 py-2 rounded-md border-green-600 text-green-600 hover:bg-green-600 hover:text-white">
+                Send Test Email
+            </button>
             <a href="/admin/clients/{{ client.id }}/keys" class="btn px-4 py-2 rounded-md">
                 Manage API Keys
             </a>
@@ -186,4 +189,173 @@
         </div>
     </div>
 </div>
+
+<!-- Test Email Modal -->
+<div id="testEmailModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Send Test Email</h3>
+
+            <form id="testEmailForm" class="space-y-4">
+                <div>
+                    <label for="test_email" class="block text-sm font-medium text-gray-700 mb-2">
+                        Recipient Email Address *
+                    </label>
+                    <input
+                        type="email"
+                        id="test_email"
+                        name="test_email"
+                        required
+                        value="{{ session.get('email', '') }}"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="your.email@example.com"
+                    >
+                    <p class="mt-1 text-xs text-gray-500">Enter the email address where you want to receive the test email</p>
+                </div>
+
+                <div id="testResultContainer" class="hidden">
+                    <div id="testResultSuccess" class="hidden p-4 mb-4 rounded-md bg-green-50 border border-green-200">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                </svg>
+                            </div>
+                            <div class="ml-3 flex-1">
+                                <h3 class="text-sm font-medium text-green-800">Test Email Sent Successfully!</h3>
+                                <div class="mt-2 text-sm text-green-700">
+                                    <p id="testSuccessMessage"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="testResultError" class="hidden p-4 mb-4 rounded-md bg-red-50 border border-red-200">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                                </svg>
+                            </div>
+                            <div class="ml-3 flex-1">
+                                <h3 class="text-sm font-medium text-red-800">Test Email Failed</h3>
+                                <div class="mt-2 text-sm text-red-700">
+                                    <p id="testErrorMessage"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="testLogs" class="hidden">
+                        <h4 class="text-sm font-medium text-gray-700 mb-2">Logs</h4>
+                        <div class="bg-gray-900 text-gray-100 p-4 rounded-md font-mono text-xs overflow-x-auto max-h-64 overflow-y-auto">
+                            <pre id="testLogsContent"></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end space-x-3 pt-4 border-t border-gray-200">
+                    <button
+                        type="button"
+                        onclick="closeTestEmailModal()"
+                        class="px-4 py-2 text-sm text-gray-700 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50"
+                    >
+                        Close
+                    </button>
+                    <button
+                        type="submit"
+                        id="sendTestButton"
+                        class="px-4 py-2 text-sm text-white bg-green-600 hover:bg-green-700 rounded-md disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    >
+                        Send Test Email
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openTestEmailModal() {
+        document.getElementById('testEmailModal').classList.remove('hidden');
+        // Reset form and results
+        document.getElementById('testResultContainer').classList.add('hidden');
+        document.getElementById('testResultSuccess').classList.add('hidden');
+        document.getElementById('testResultError').classList.add('hidden');
+        document.getElementById('testLogs').classList.add('hidden');
+    }
+
+    function closeTestEmailModal() {
+        document.getElementById('testEmailModal').classList.add('hidden');
+    }
+
+    // Close modal on outside click
+    document.getElementById('testEmailModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeTestEmailModal();
+        }
+    });
+
+    // Handle form submission
+    document.getElementById('testEmailForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const email = document.getElementById('test_email').value;
+        const button = document.getElementById('sendTestButton');
+        const originalButtonText = button.textContent;
+
+        // Disable button and show loading
+        button.disabled = true;
+        button.textContent = 'Sending...';
+
+        // Hide previous results
+        document.getElementById('testResultContainer').classList.add('hidden');
+        document.getElementById('testResultSuccess').classList.add('hidden');
+        document.getElementById('testResultError').classList.add('hidden');
+        document.getElementById('testLogs').classList.add('hidden');
+
+        try {
+            const response = await fetch('/admin/clients/{{ client.id }}/test-email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    'test_email': email
+                })
+            });
+
+            const data = await response.json();
+
+            // Show result container
+            document.getElementById('testResultContainer').classList.remove('hidden');
+
+            if (data.success) {
+                // Show success message
+                document.getElementById('testResultSuccess').classList.remove('hidden');
+                document.getElementById('testSuccessMessage').textContent = data.message || 'Test email sent successfully!';
+            } else {
+                // Show error message
+                document.getElementById('testResultError').classList.remove('hidden');
+                document.getElementById('testErrorMessage').textContent = data.error || 'Failed to send test email';
+            }
+
+            // Show logs if available
+            if (data.logs && data.logs.length > 0) {
+                document.getElementById('testLogs').classList.remove('hidden');
+                document.getElementById('testLogsContent').textContent = data.logs.join('\n');
+            }
+
+        } catch (error) {
+            // Show error message
+            document.getElementById('testResultContainer').classList.remove('hidden');
+            document.getElementById('testResultError').classList.remove('hidden');
+            document.getElementById('testErrorMessage').textContent = 'Network error: ' + error.message;
+        } finally {
+            // Re-enable button
+            button.disabled = false;
+            button.textContent = originalButtonText;
+        }
+    });
+</script>
 {% endblock %}
