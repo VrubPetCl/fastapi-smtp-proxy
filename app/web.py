@@ -184,7 +184,7 @@ async def forgot_password(
         # Create reset token
         token = await create_password_reset_token(db, admin.id)
         # In production, send email with reset link
-        logger.info(f"Password reset requested for {admin.email}. Token: {token}")
+        logger.info(f"Password reset requested for {admin.email}")
 
     # Always show success message (don't reveal if email exists)
     return templates.TemplateResponse(
