@@ -463,9 +463,10 @@ async def create_client(
     smtp_port: int = Form(...),
     smtp_username: str = Form(...),
     smtp_password: str = Form(...),
-    from_email: str = Form(...),
-    from_name: Optional[str] = Form(None),
-    use_tls: bool = Form(False),
+    default_from_email: Optional[str] = Form(None),
+    default_from_name: Optional[str] = Form(None),
+    smtp_use_tls: bool = Form(False),
+    smtp_use_ssl: bool = Form(False),
     is_active: bool = Form(False),
     session: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -482,9 +483,10 @@ async def create_client(
         smtp_port=smtp_port,
         smtp_username=smtp_username,
         smtp_password=encrypted_password,  # Encrypted
-        from_email=from_email,
-        from_name=from_name,
-        use_tls=use_tls,
+        default_from_email=default_from_email,
+        default_from_name=default_from_name,
+        smtp_use_tls=smtp_use_tls,
+        smtp_use_ssl=smtp_use_ssl,
         is_active=is_active
     )
 
@@ -587,9 +589,10 @@ async def update_client(
     smtp_port: int = Form(...),
     smtp_username: str = Form(...),
     smtp_password: Optional[str] = Form(None),
-    from_email: str = Form(...),
-    from_name: Optional[str] = Form(None),
-    use_tls: bool = Form(False),
+    default_from_email: Optional[str] = Form(None),
+    default_from_name: Optional[str] = Form(None),
+    smtp_use_tls: bool = Form(False),
+    smtp_use_ssl: bool = Form(False),
     is_active: bool = Form(False),
     session: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
@@ -606,9 +609,10 @@ async def update_client(
     client.smtp_host = smtp_host
     client.smtp_port = smtp_port
     client.smtp_username = smtp_username
-    client.from_email = from_email
-    client.from_name = from_name
-    client.use_tls = use_tls
+    client.default_from_email = default_from_email
+    client.default_from_name = default_from_name
+    client.smtp_use_tls = smtp_use_tls
+    client.smtp_use_ssl = smtp_use_ssl
     client.is_active = is_active
 
     # Only update password if provided

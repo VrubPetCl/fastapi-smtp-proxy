@@ -70,7 +70,7 @@
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Use TLS</dt>
                         <dd class="mt-1 text-sm text-gray-900">
-                            {% if client.use_tls %}
+                            {% if client.smtp_use_tls %}
                             <span class="text-green-600">✓ Enabled</span>
                             {% else %}
                             <span class="text-gray-500">✗ Disabled</span>
@@ -78,13 +78,25 @@
                         </dd>
                     </div>
                     <div>
-                        <dt class="text-sm font-medium text-gray-500">Default From Email</dt>
-                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ client.from_email }}</dd>
+                        <dt class="text-sm font-medium text-gray-500">Use SSL</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            {% if client.smtp_use_ssl %}
+                            <span class="text-green-600">✓ Enabled</span>
+                            {% else %}
+                            <span class="text-gray-500">✗ Disabled</span>
+                            {% endif %}
+                        </dd>
                     </div>
-                    {% if client.from_name %}
+                    {% if client.default_from_email %}
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Default From Email</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ client.default_from_email }}</dd>
+                    </div>
+                    {% endif %}
+                    {% if client.default_from_name %}
                     <div>
                         <dt class="text-sm font-medium text-gray-500">Default From Name</dt>
-                        <dd class="mt-1 text-sm text-gray-900">{{ client.from_name }}</dd>
+                        <dd class="mt-1 text-sm text-gray-900">{{ client.default_from_name }}</dd>
                     </div>
                     {% endif %}
                 </dl>
