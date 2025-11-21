@@ -336,13 +336,59 @@ async def clients_list(
 @router.get("/admin/analytics", response_class=HTMLResponse)
 async def analytics_page(
     request: Request,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    client_id: Optional[int] = None,
     session: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Display analytics page."""
-    # For now, redirect to dashboard
-    # In a full implementation, this would show detailed analytics
-    return RedirectResponse(url="/admin/dashboard", status_code=302)
+    """Display analytics page with detailed metrics."""
+    from app.analytics_service import get_analytics_summary
+    from datetime import datetime, timedelta
+
+    # Parse dates or use defaults (last 30 days)
+    end_date_obj = datetime.utcnow()
+    start_date_obj = end_date_obj - timedelta(days=30)
+
+    if end_date:
+        try:
+            end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
+            end_date_obj = end_date_obj.replace(hour=23, minute=59, second=59)
+        except ValueError:
+            pass
+
+    if start_date:
+        try:
+            start_date_obj = datetime.strptime(start_date, '%Y-%m-%d')
+        except ValueError:
+            pass
+
+    # Get all clients for filter dropdown
+    result = await db.execute(select(Client).order_by(Client.name))
+    clients = result.scalars().all()
+
+    # Get analytics summary
+    analytics = await get_analytics_summary(
+        db=db,
+        client_id=client_id,
+        start_date=start_date_obj,
+        end_date=end_date_obj
+    )
+
+    return templates.TemplateResponse(
+        "analytics.html",
+        {
+            "request": request,
+            "session": session,
+            "analytics": analytics,
+            "clients": clients,
+            "client_id": client_id,
+            "start_date": start_date or start_date_obj.strftime('%Y-%m-%d'),
+            "end_date": end_date or end_date_obj.strftime('%Y-%m-%d'),
+            "start_date_obj": start_date_obj,
+            "end_date_obj": end_date_obj,
+        }
+    )
 
 
 # ============================================================================

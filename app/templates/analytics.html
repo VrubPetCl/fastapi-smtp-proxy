@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - SMTP Proxy Admin{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Analytics</h1>
+        <p class="mt-2 text-gray-600">Detailed email delivery analytics and performance metrics</p>
+    </div>
+
+    <!-- Filters -->
+    <div class="card p-6 mb-6">
+        <form method="GET" action="/admin/analytics" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label for="start_date" class="block text-sm font-medium text-gray-700 mb-2">Start Date</label>
+                <input
+                    type="date"
+                    id="start_date"
+                    name="start_date"
+                    value="{{ start_date }}"
+                    class="w-full px-3 py-2 rounded-md"
+                >
+            </div>
+            <div>
+                <label for="end_date" class="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                <input
+                    type="date"
+                    id="end_date"
+                    name="end_date"
+                    value="{{ end_date }}"
+                    class="w-full px-3 py-2 rounded-md"
+                >
+            </div>
+            <div>
+                <label for="client_id" class="block text-sm font-medium text-gray-700 mb-2">Client</label>
+                <select
+                    id="client_id"
+                    name="client_id"
+                    class="w-full px-3 py-2 rounded-md"
+                >
+                    <option value="">All Clients</option>
+                    {% for client in clients %}
+                    <option value="{{ client.id }}" {% if client_id and client.id == client_id %}selected{% endif %}>
+                        {{ client.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-end">
+                <button type="submit" class="btn btn-primary w-full px-4 py-2 rounded-md">
+                    Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Key Metrics -->
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+        <div class="card p-6">
+            <p class="text-sm font-medium text-gray-600">Total Emails</p>
+            <p class="mt-2 text-3xl font-bold text-gray-900">{{ analytics.total_emails }}</p>
+        </div>
+        <div class="card p-6">
+            <p class="text-sm font-medium text-gray-600">Emails Sent</p>
+            <p class="mt-2 text-3xl font-bold text-green-600">{{ analytics.total_sent }}</p>
+        </div>
+        <div class="card p-6">
+            <p class="text-sm font-medium text-gray-600">Failed Emails</p>
+            <p class="mt-2 text-3xl font-bold text-red-600">{{ analytics.total_failed }}</p>
+        </div>
+        <div class="card p-6">
+            <p class="text-sm font-medium text-gray-600">Success Rate</p>
+            <p class="mt-2 text-3xl font-bold {% if analytics.success_rate >= 95 %}text-green-600{% elif analytics.success_rate >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                {{ "%.1f"|format(analytics.success_rate) }}%
+            </p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <!-- Daily Volume Chart -->
+        <div class="card p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Daily Email Volume</h2>
+            {% if analytics.daily_metrics %}
+            <div class="space-y-2">
+                {% set max_total = analytics.daily_metrics | map(attribute='total_emails') | max %}
+                {% for day in analytics.daily_metrics[-14:] %}
+                <div>
+                    <div class="flex justify-between text-xs text-gray-600 mb-1">
+                        <span>{{ day.date }}</span>
+                        <span>{{ day.total_emails }} emails ({{ "%.0f"|format(day.success_rate) }}%)</span>
+                    </div>
+                    <div class="flex space-x-1 h-6">
+                        {% set sent_width = (day.total_sent / max_total * 100) if max_total > 0 else 0 %}
+                        {% set failed_width = (day.total_failed / max_total * 100) if max_total > 0 else 0 %}
+                        <div class="bg-green-500 rounded" style="width: {{ sent_width }}%" title="Sent: {{ day.total_sent }}"></div>
+                        <div class="bg-red-500 rounded" style="width: {{ failed_width }}%" title="Failed: {{ day.total_failed }}"></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-center text-gray-500 py-8">No data available for this period</p>
+            {% endif %}
+        </div>
+
+        <!-- Hourly Distribution -->
+        <div class="card p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Hourly Distribution</h2>
+            {% if analytics.hourly_distribution %}
+            <div class="space-y-2">
+                {% set max_hourly = analytics.hourly_distribution | map(attribute='email_count') | max %}
+                {% for hour_data in analytics.hourly_distribution %}
+                <div class="flex items-center">
+                    <span class="text-xs text-gray-600 w-16">{{ "%02d"|format(hour_data.hour) }}:00</span>
+                    <div class="flex-1 ml-3">
+                        {% set width = (hour_data.email_count / max_hourly * 100) if max_hourly > 0 else 0 %}
+                        <div class="bg-blue-500 h-4 rounded" style="width: {{ width }}%"></div>
+                    </div>
+                    <span class="text-xs text-gray-600 ml-3 w-12 text-right">{{ hour_data.email_count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-center text-gray-500 py-8">No hourly data available</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Performance Metrics -->
+    <div class="card p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Performance Metrics</h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div>
+                <p class="text-sm font-medium text-gray-600 mb-2">Average Processing Time</p>
+                <p class="text-2xl font-bold text-gray-900">
+                    {% if analytics.avg_processing_time_ms %}
+                        {{ "%.0f"|format(analytics.avg_processing_time_ms) }} ms
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </p>
+            </div>
+            <div>
+                <p class="text-sm font-medium text-gray-600 mb-2">P95 Processing Time</p>
+                <p class="text-2xl font-bold text-gray-900">
+                    {% if analytics.p95_processing_time_ms %}
+                        {{ "%.0f"|format(analytics.p95_processing_time_ms) }} ms
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </p>
+            </div>
+            <div>
+                <p class="text-sm font-medium text-gray-600 mb-2">P99 Processing Time</p>
+                <p class="text-2xl font-bold text-gray-900">
+                    {% if analytics.p99_processing_time_ms %}
+                        {{ "%.0f"|format(analytics.p99_processing_time_ms) }} ms
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Analysis -->
+    {% if analytics.top_errors %}
+    <div class="card p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Error Analysis</h2>
+        <div class="space-y-3">
+            {% for error in analytics.top_errors[:10] %}
+            <div>
+                <div class="flex justify-between text-sm mb-1">
+                    <span class="font-medium text-gray-900">{{ error.error_type or 'Unknown Error' }}</span>
+                    <span class="text-gray-600">{{ error.count }} ({{ "%.1f"|format(error.percentage) }}%)</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-red-500 h-2 rounded-full" style="width: {{ error.percentage }}%"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Additional Metrics -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Attachment Stats -->
+        <div class="card p-6">
+            <h3 class="text-sm font-semibold text-gray-900 mb-3">Attachment Statistics</h3>
+            <dl class="space-y-2">
+                <div class="flex justify-between text-sm">
+                    <dt class="text-gray-600">Emails with Attachments</dt>
+                    <dd class="font-medium text-gray-900">{{ analytics.emails_with_attachments }}</dd>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <dt class="text-gray-600">Total Attachments</dt>
+                    <dd class="font-medium text-gray-900">{{ analytics.total_attachments }}</dd>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <dt class="text-gray-600">Total Size</dt>
+                    <dd class="font-medium text-gray-900">
+                        {% if analytics.total_attachment_bytes > 1048576 %}
+                            {{ "%.1f"|format(analytics.total_attachment_bytes / 1048576) }} MB
+                        {% elif analytics.total_attachment_bytes > 1024 %}
+                            {{ "%.0f"|format(analytics.total_attachment_bytes / 1024) }} KB
+                        {% else %}
+                            {{ analytics.total_attachment_bytes }} bytes
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <dt class="text-gray-600">Avg Attachment Size</dt>
+                    <dd class="font-medium text-gray-900">
+                        {% if analytics.total_attachments > 0 %}
+                            {% set avg_size = analytics.total_attachment_bytes / analytics.total_attachments %}
+                            {% if avg_size > 1048576 %}
+                                {{ "%.1f"|format(avg_size / 1048576) }} MB
+                            {% else %}
+                                {{ "%.0f"|format(avg_size / 1024) }} KB
+                            {% endif %}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+
+        <!-- Summary Stats -->
+        <div class="card p-6">
+            <h3 class="text-sm font-semibold text-gray-900 mb-3">Summary</h3>
+            <dl class="space-y-2">
+                <div class="flex justify-between text-sm">
+                    <dt class="text-gray-600">Date Range</dt>
+                    <dd class="font-medium text-gray-900">{{ (end_date_obj - start_date_obj).days + 1 }} days</dd>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <dt class="text-gray-600">Avg Emails/Day</dt>
+                    <dd class="font-medium text-gray-900">
+                        {% set days = (end_date_obj - start_date_obj).days + 1 %}
+                        {{ "%.1f"|format(analytics.total_emails / days) }}
+                    </dd>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <dt class="text-gray-600">Peak Hour</dt>
+                    <dd class="font-medium text-gray-900">
+                        {% if analytics.hourly_distribution %}
+                            {% set peak = analytics.hourly_distribution | sort(attribute='email_count', reverse=True) | first %}
+                            {{ "%02d"|format(peak.hour) }}:00 ({{ peak.email_count }} emails)
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </dd>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <dt class="text-gray-600">Client Filter</dt>
+                    <dd class="font-medium text-gray-900">
+                        {% if client_id %}
+                            {% for c in clients if c.id == client_id %}{{ c.name }}{% endfor %}
+                        {% else %}
+                            All Clients
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+</div>
+{% endblock %}
