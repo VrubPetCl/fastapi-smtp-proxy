@@ -13,6 +13,7 @@ from app.database import get_db
 from app.schemas import AdminUser, Client, APIKey, EmailLog
 from app.web_auth import authenticate_admin, create_password_reset_token, reset_password, verify_reset_token
 from app.config import settings
+from app.encryption import get_encryption
 
 logger = logging.getLogger(__name__)
 
@@ -470,13 +471,17 @@ async def create_client(
     db: AsyncSession = Depends(get_db)
 ):
     """Create new client."""
+    # Encrypt SMTP password before storing
+    encryption = get_encryption()
+    encrypted_password = encryption.encrypt(smtp_password)
+
     # Create new client
     client = Client(
         name=name,
         smtp_host=smtp_host,
         smtp_port=smtp_port,
         smtp_username=smtp_username,
-        smtp_password=smtp_password,  # In production, encrypt this
+        smtp_password=encrypted_password,  # Encrypted
         from_email=from_email,
         from_name=from_name,
         use_tls=use_tls,
@@ -608,7 +613,8 @@ async def update_client(
 
     # Only update password if provided
     if smtp_password and smtp_password.strip():
-        client.smtp_password = smtp_password  # In production, encrypt this
+        encryption = get_encryption()
+        client.smtp_password = encryption.encrypt(smtp_password)  # Encrypted
 
     await db.commit()
 

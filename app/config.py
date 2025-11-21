@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expiration_hours: int = 720  # 30 days
 
+    # Encryption
+    encryption_key: str  # Fernet key for encrypting sensitive data (SMTP passwords, etc.)
+
     # Database
     database_url: str = "sqlite+aiosqlite:///./smtp_proxy.db"
 

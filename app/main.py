@@ -23,6 +23,7 @@ from app.models import (
 from app.schemas import Client, APIKey, EmailLog, AnalyticsSnapshot, AdminUser
 from app.auth import get_current_client, get_current_client_and_key, create_api_key, get_admin_user
 from app.smtp_service import send_email
+from app.encryption import get_encryption
 from app.analytics_service import (
     get_quarter, calculate_analytics_snapshot, get_analytics_summary,
     rotate_old_quarters, archive_quarter
@@ -262,13 +263,17 @@ async def create_client(
             detail=f"Client with name '{client_data.name}' already exists"
         )
 
+    # Encrypt SMTP password before storing
+    encryption = get_encryption()
+    encrypted_password = encryption.encrypt(client_data.smtp_password)
+
     # Create new client
     new_client = Client(
         name=client_data.name,
         smtp_host=client_data.smtp_host,
         smtp_port=client_data.smtp_port,
         smtp_username=client_data.smtp_username,
-        smtp_password=client_data.smtp_password,  # TODO: Encrypt in production
+        smtp_password=encrypted_password,  # Encrypted
         smtp_use_tls=client_data.smtp_use_tls,
         smtp_use_ssl=client_data.smtp_use_ssl,
         default_from_email=client_data.default_from_email,

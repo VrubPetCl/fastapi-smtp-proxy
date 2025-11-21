@@ -10,6 +10,7 @@ from typing import Optional, List, Tuple, Dict
 import aiosmtplib
 from app.schemas import Client
 from app.models import EmailRequest
+from app.encryption import get_encryption
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,11 @@ class SMTPService:
         self.smtp_host = client.smtp_host
         self.smtp_port = client.smtp_port
         self.smtp_username = client.smtp_username
-        self.smtp_password = client.smtp_password
+
+        # Decrypt SMTP password for use
+        encryption = get_encryption()
+        self.smtp_password = encryption.decrypt(client.smtp_password)
+
         self.use_tls = client.smtp_use_tls
         self.use_ssl = client.smtp_use_ssl
 
