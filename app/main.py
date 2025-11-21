@@ -150,6 +150,7 @@ async def health_check():
     description="Send an email using the authenticated client's SMTP configuration",
 )
 async def send_email_endpoint(
+    request: Request,
     email_request: EmailRequest,
     client_and_key: tuple = Depends(get_current_client_and_key),
     db: AsyncSession = Depends(get_db),
@@ -161,6 +162,10 @@ async def send_email_endpoint(
     and sends it through the client's preconfigured SMTP server.
     """
     client, api_key_id = client_and_key
+
+    # Capture security tracking info
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
 
     try:
         # Send email and get metrics
@@ -209,6 +214,8 @@ async def send_email_endpoint(
             day_of_week=day_of_week,
             hour=hour,
             smtp_response=smtp_response,
+            source_ip=client_ip,
+            user_agent=user_agent,
         )
         db.add(email_log)
         await db.commit()

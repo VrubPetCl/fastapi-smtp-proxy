@@ -101,6 +101,11 @@ class EmailLog(Base):
     # SMTP response
     smtp_response = Column(Text, nullable=True)
 
+    # Security tracking
+    source_ip = Column(String(45), nullable=True, index=True)  # IPv4 (15) or IPv6 (45)
+    user_agent = Column(String(500), nullable=True)
+    country_code = Column(String(2), nullable=True, index=True)  # ISO 3166-1 alpha-2
+
     # Relationships
     client = relationship("Client", back_populates="email_logs")
     api_key = relationship("APIKey", back_populates="email_logs")
@@ -109,6 +114,7 @@ class EmailLog(Base):
         Index('idx_client_quarter', 'client_id', 'year', 'quarter'),
         Index('idx_status_quarter', 'status', 'year', 'quarter'),
         Index('idx_sent_at_client', 'sent_at', 'client_id'),
+        Index('idx_source_ip_sent_at', 'source_ip', 'sent_at'),
     )
 
 
@@ -215,6 +221,28 @@ class AnalyticsSnapshot(Base):
 
     __table_args__ = (
         Index('idx_analytics_client_period', 'client_id', 'year', 'quarter', 'month'),
+    )
+
+
+class LoginAttempt(Base):
+    """Track login attempts for security monitoring."""
+
+    __tablename__ = "login_attempts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(255), nullable=False, index=True)
+    ip_address = Column(String(45), nullable=False, index=True)  # IPv4 or IPv6
+    user_agent = Column(String(500), nullable=True)
+    success = Column(Boolean, nullable=False, index=True)
+    failure_reason = Column(String(100), nullable=True)  # invalid_password, user_not_found, etc.
+    attempted_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    country_code = Column(String(2), nullable=True, index=True)  # ISO 3166-1 alpha-2
+    city = Column(String(100), nullable=True)
+
+    __table_args__ = (
+        Index('idx_ip_attempted_at', 'ip_address', 'attempted_at'),
+        Index('idx_username_attempted_at', 'username', 'attempted_at'),
+        Index('idx_success_attempted_at', 'success', 'attempted_at'),
     )
 
 

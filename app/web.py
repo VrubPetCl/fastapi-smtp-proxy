@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, case
 from itsdangerous import URLSafeTimedSerializer
 from app.database import get_db
-from app.schemas import AdminUser, Client, APIKey, EmailLog
+from app.schemas import AdminUser, Client, APIKey, EmailLog, LoginAttempt
 from app.web_auth import authenticate_admin, create_password_reset_token, reset_password, verify_reset_token
 from app.config import settings
 from app.encryption import get_encryption
@@ -119,9 +119,23 @@ async def login(
             status_code=429
         )
 
+    # Capture user agent for security tracking
+    user_agent = request.headers.get("user-agent", "unknown")
+
     admin = await authenticate_admin(db, username, password)
 
     if not admin:
+        # Log failed login attempt
+        login_attempt = LoginAttempt(
+            username=username,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            success=False,
+            failure_reason="invalid_credentials"
+        )
+        db.add(login_attempt)
+        await db.commit()
+
         logger.warning(f"Failed login attempt for: {username} from {client_ip}")
         return templates.TemplateResponse(
             "login.html",
@@ -132,6 +146,19 @@ async def login(
             },
             status_code=400
         )
+
+    # Log successful login attempt
+    login_attempt = LoginAttempt(
+        username=username,
+        ip_address=client_ip,
+        user_agent=user_agent,
+        success=True,
+        failure_reason=None
+    )
+    db.add(login_attempt)
+    await db.commit()
+
+    logger.info(f"Successful login for: {username} from {client_ip}")
 
     # Create session
     session_data = {
@@ -333,6 +360,87 @@ async def dashboard(
             "session": session,
             "stats": stats,
             "recent_emails": recent_emails
+        }
+    )
+
+
+@router.get("/admin/security-logs", response_class=HTMLResponse)
+async def security_logs(
+    request: Request,
+    session: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+    days: int = 7
+):
+    """Display security logs and suspicious activity."""
+    # Get recent login attempts (last N days)
+    cutoff_date = datetime.utcnow() - timedelta(days=days)
+
+    # Get login attempts
+    result = await db.execute(
+        select(LoginAttempt)
+        .where(LoginAttempt.attempted_at >= cutoff_date)
+        .order_by(LoginAttempt.attempted_at.desc())
+        .limit(100)
+    )
+    login_attempts = result.scalars().all()
+
+    # Get suspicious IPs (multiple failed login attempts)
+    result = await db.execute(
+        select(
+            LoginAttempt.ip_address,
+            LoginAttempt.country_code,
+            func.count(LoginAttempt.id).label('total_attempts'),
+            func.sum(case((LoginAttempt.success == False, 1), else_=0)).label('failed_attempts'),
+            func.max(LoginAttempt.attempted_at).label('last_attempt')
+        )
+        .where(LoginAttempt.attempted_at >= cutoff_date)
+        .group_by(LoginAttempt.ip_address, LoginAttempt.country_code)
+        .having(func.sum(case((LoginAttempt.success == False, 1), else_=0)) >= 2)
+        .order_by(func.sum(case((LoginAttempt.success == False, 1), else_=0)).desc())
+    )
+    suspicious_ips = result.all()
+
+    # Get recent email sending IPs
+    result = await db.execute(
+        select(
+            EmailLog.source_ip,
+            EmailLog.country_code,
+            func.count(EmailLog.id).label('email_count'),
+            func.max(EmailLog.sent_at).label('last_sent'),
+            Client.name.label('client_name')
+        )
+        .join(Client, EmailLog.client_id == Client.id)
+        .where(EmailLog.sent_at >= cutoff_date, EmailLog.source_ip.isnot(None))
+        .group_by(EmailLog.source_ip, EmailLog.country_code, Client.name)
+        .order_by(func.max(EmailLog.sent_at).desc())
+        .limit(50)
+    )
+    email_ips = result.all()
+
+    # Get summary statistics
+    total_login_attempts = len(login_attempts)
+    failed_logins = sum(1 for attempt in login_attempts if not attempt.success)
+    unique_ips_login = len(set(attempt.ip_address for attempt in login_attempts))
+    suspicious_ip_count = len(suspicious_ips)
+
+    stats = {
+        "total_login_attempts": total_login_attempts,
+        "failed_logins": failed_logins,
+        "success_rate": ((total_login_attempts - failed_logins) / total_login_attempts * 100) if total_login_attempts > 0 else 0,
+        "unique_ips_login": unique_ips_login,
+        "suspicious_ip_count": suspicious_ip_count,
+        "days": days
+    }
+
+    return templates.TemplateResponse(
+        "security_logs.html",
+        {
+            "request": request,
+            "session": session,
+            "stats": stats,
+            "login_attempts": login_attempts,
+            "suspicious_ips": suspicious_ips,
+            "email_ips": email_ips
         }
     )
 
