@@ -3,18 +3,19 @@ import jwt
 import hashlib
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends, HTTPException, status, Request
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, HTTPBasic, HTTPBasicCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.config import settings
-from app.schemas import Client, APIKey
+from app.schemas import Client, APIKey, AdminUser
 from app.database import get_db
 import logging
 
 logger = logging.getLogger(__name__)
 
 security = HTTPBearer()
+basic_auth = HTTPBasic()
 
 
 def create_api_key(client_id: int, key_name: str, expires_at: Optional[datetime] = None) -> tuple[str, str]:
@@ -238,3 +239,38 @@ async def get_current_client_and_key(
     logger.info(f"Client authenticated: {client.name} (ID: {client.id})")
 
     return client, api_key.id
+
+
+async def get_admin_user(
+    credentials: HTTPBasicCredentials = Depends(basic_auth),
+    db: AsyncSession = Depends(get_db)
+) -> AdminUser:
+    """
+    Dependency to authenticate admin users via HTTP Basic Auth for API endpoints.
+
+    Args:
+        credentials: HTTP Basic credentials (username/password)
+        db: Database session
+
+    Returns:
+        AdminUser: The authenticated admin user
+
+    Raises:
+        HTTPException: If authentication fails
+    """
+    from app.web_auth import authenticate_admin
+
+    # Authenticate admin
+    admin = await authenticate_admin(db, credentials.username, credentials.password)
+
+    if not admin:
+        logger.warning(f"Failed admin authentication attempt for: {credentials.username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid admin credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+    logger.info(f"Admin authenticated via API: {admin.username}")
+
+    return admin

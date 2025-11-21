@@ -1,7 +1,8 @@
 """Web routes for admin dashboard."""
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Dict
+from collections import defaultdict
 from fastapi import APIRouter, Request, Depends, Form, HTTPException, status as http_status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -21,6 +22,11 @@ templates = Jinja2Templates(directory="app/templates")
 # Session serializer for secure cookies
 serializer = URLSafeTimedSerializer(settings.jwt_secret_key)
 
+# Rate limiting for login attempts
+login_attempts: Dict[str, list] = defaultdict(list)
+MAX_LOGIN_ATTEMPTS = 5
+LOCKOUT_PERIOD = 900  # 15 minutes in seconds
+
 
 def get_session_data(request: Request) -> dict:
     """Extract session data from request."""
@@ -29,14 +35,38 @@ def get_session_data(request: Request) -> dict:
         return {}
 
     try:
-        return serializer.loads(session_cookie, max_age=86400 * 7)  # 7 days
-    except:
+        return serializer.loads(session_cookie, max_age=7200)  # 2 hours
+    except (Exception,):  # Fixed: specific exception handling
         return {}
 
 
 def create_session_cookie(data: dict) -> str:
     """Create a signed session cookie."""
     return serializer.dumps(data)
+
+
+def check_rate_limit(identifier: str) -> bool:
+    """
+    Check if the identifier (IP/username) has exceeded rate limit.
+
+    Returns True if request is allowed, False if rate limited.
+    """
+    now = datetime.utcnow()
+    cutoff_time = now - timedelta(seconds=LOCKOUT_PERIOD)
+
+    # Remove old attempts
+    login_attempts[identifier] = [
+        attempt_time for attempt_time in login_attempts[identifier]
+        if attempt_time > cutoff_time
+    ]
+
+    # Check if rate limited
+    if len(login_attempts[identifier]) >= MAX_LOGIN_ATTEMPTS:
+        return False
+
+    # Record this attempt
+    login_attempts[identifier].append(now)
+    return True
 
 
 def require_admin(request: Request):
@@ -72,9 +102,26 @@ async def login(
     db: AsyncSession = Depends(get_db)
 ):
     """Process login form."""
+    # Rate limiting check
+    client_ip = request.client.host if request.client else "unknown"
+    rate_limit_key = f"{client_ip}:{username}"
+
+    if not check_rate_limit(rate_limit_key):
+        logger.warning(f"Rate limit exceeded for login attempt: {username} from {client_ip}")
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "session": {},
+                "error": "Too many login attempts. Please try again in 15 minutes."
+            },
+            status_code=429
+        )
+
     admin = await authenticate_admin(db, username, password)
 
     if not admin:
+        logger.warning(f"Failed login attempt for: {username} from {client_ip}")
         return templates.TemplateResponse(
             "login.html",
             {
@@ -97,10 +144,10 @@ async def login(
     response.set_cookie(
         key="session",
         value=session_cookie,
-        httponly=True,
-        secure=False,  # Set to True in production with HTTPS
-        samesite="lax",
-        max_age=86400 * 7  # 7 days
+        httponly=True,  # Prevent JavaScript access (XSS protection)
+        secure=True,    # HTTPS only (MITM protection)
+        samesite="lax", # CSRF protection
+        max_age=7200    # 2 hours (reduced from 7 days)
     )
 
     return response

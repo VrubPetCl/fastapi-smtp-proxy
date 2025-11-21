@@ -20,8 +20,8 @@ from app.models import (
     APIKeyCreate,
     APIKeyResponse,
 )
-from app.schemas import Client, APIKey, EmailLog, AnalyticsSnapshot
-from app.auth import get_current_client, get_current_client_and_key, create_api_key
+from app.schemas import Client, APIKey, EmailLog, AnalyticsSnapshot, AdminUser
+from app.auth import get_current_client, get_current_client_and_key, create_api_key, get_admin_user
 from app.smtp_service import send_email
 from app.analytics_service import (
     get_quarter, calculate_analytics_snapshot, get_analytics_summary,
@@ -61,11 +61,53 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=["*"],  # TODO: Configure appropriately for production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    """Add security headers to all responses."""
+    response = await call_next(request)
+
+    # Prevent clickjacking
+    response.headers["X-Frame-Options"] = "DENY"
+
+    # Prevent MIME sniffing
+    response.headers["X-Content-Type-Options"] = "nosniff"
+
+    # XSS Protection (legacy, but doesn't hurt)
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+
+    # Content Security Policy
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+        "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+        "img-src 'self' data:; "
+        "font-src 'self'; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none';"
+    )
+
+    # Enforce HTTPS (if not in debug mode)
+    if not settings.debug:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    # Referrer policy
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+
+    # Permissions policy
+    response.headers["Permissions-Policy"] = (
+        "geolocation=(), microphone=(), camera=(), payment=()"
+    )
+
+    return response
+
 
 # Include web routes
 app.include_router(web.router)
@@ -202,12 +244,13 @@ async def send_email_endpoint(
 )
 async def create_client(
     client_data: ClientCreate,
+    admin: AdminUser = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Create a new client with SMTP configuration.
 
-    In production, this should be protected with admin authentication.
+    Requires admin authentication via HTTP Basic Auth.
     """
     # Check if client name already exists
     result = await db.execute(select(Client).where(Client.name == client_data.name))
@@ -250,12 +293,13 @@ async def create_client(
 async def list_clients(
     skip: int = 0,
     limit: int = 100,
+    admin: AdminUser = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     List all clients.
 
-    In production, this should be protected with admin authentication.
+    Requires admin authentication via HTTP Basic Auth.
     """
     result = await db.execute(
         select(Client)
@@ -276,12 +320,13 @@ async def list_clients(
 )
 async def get_client(
     client_id: int,
+    admin: AdminUser = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Get client details by ID.
 
-    In production, this should be protected with admin authentication.
+    Requires admin authentication via HTTP Basic Auth.
     """
     result = await db.execute(select(Client).where(Client.id == client_id))
     client = result.scalar_one_or_none()
@@ -308,12 +353,13 @@ async def get_client(
 )
 async def create_api_key_endpoint(
     api_key_data: APIKeyCreate,
+    admin: AdminUser = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Create a new API key for a client.
 
-    In production, this should be protected with admin authentication.
+    Requires admin authentication via HTTP Basic Auth.
     """
     # Verify client exists
     result = await db.execute(select(Client).where(Client.id == api_key_data.client_id))
@@ -363,12 +409,13 @@ async def create_api_key_endpoint(
 )
 async def list_client_api_keys(
     client_id: int,
+    admin: AdminUser = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     List all API keys for a client.
 
-    In production, this should be protected with admin authentication.
+    Requires admin authentication via HTTP Basic Auth.
     Note: The actual JWT tokens are not returned, only metadata.
     """
     result = await db.execute(
@@ -395,12 +442,13 @@ async def list_client_api_keys(
 )
 async def delete_api_key(
     api_key_id: int,
+    admin: AdminUser = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Deactivate an API key.
 
-    In production, this should be protected with admin authentication.
+    Requires admin authentication via HTTP Basic Auth.
     """
     result = await db.execute(select(APIKey).where(APIKey.id == api_key_id))
     api_key = result.scalar_one_or_none()
@@ -519,13 +567,14 @@ async def create_snapshot_endpoint(
     description="Get analytics summary across all clients (admin only)",
 )
 async def get_global_analytics_endpoint(
+    admin: AdminUser = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
     days: int = 30,
 ):
     """
     Get global analytics summary across all clients.
 
-    In production, this should be protected with admin authentication.
+    Requires admin authentication via HTTP Basic Auth.
     """
     from datetime import timedelta
 
@@ -548,6 +597,7 @@ async def get_global_analytics_endpoint(
     description="Manually trigger quarterly data rotation (admin only)",
 )
 async def rotate_quarters_endpoint(
+    admin: AdminUser = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
     keep_quarters: int = 2,
 ):
@@ -557,7 +607,7 @@ async def rotate_quarters_endpoint(
     This will archive email logs older than the specified number of quarters
     and create analytics snapshots.
 
-    In production, this should be protected with admin authentication.
+    Requires admin authentication via HTTP Basic Auth.
 
     Args:
         keep_quarters: Number of recent quarters to keep (default: 2)
@@ -574,13 +624,14 @@ async def rotate_quarters_endpoint(
 )
 async def get_client_analytics_endpoint(
     client_id: int,
+    admin: AdminUser = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
     days: int = 30,
 ):
     """
     Get analytics for a specific client.
 
-    In production, this should be protected with admin authentication.
+    Requires admin authentication via HTTP Basic Auth.
     """
     from datetime import timedelta
 
