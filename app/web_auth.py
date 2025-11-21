@@ -2,22 +2,23 @@
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional
-from passlib.context import CryptContext
+from pwdlib import PasswordHash
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.schemas import AdminUser, PasswordResetToken
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Use Argon2id for password hashing (modern, secure default)
+pwd_hash = PasswordHash.recommended()
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt."""
-    return pwd_context.hash(password)
+    """Hash a password using Argon2id."""
+    return pwd_hash.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    return pwd_hash.verify(plain_password, hashed_password)
 
 
 async def authenticate_admin(db: AsyncSession, username: str, password: str) -> Optional[AdminUser]:
