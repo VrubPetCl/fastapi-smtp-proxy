@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}{% if client %}Edit Client{% else %}New Client{% endif %} - SMTP Proxy Admin{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">{% if client %}Edit Client{% else %}New Client{% endif %}</h1>
+        <p class="mt-2 text-gray-600">{% if client %}Update client SMTP configuration{% else %}Add a new SMTP client configuration{% endif %}</p>
+    </div>
+
+    <div class="card p-8">
+        <form method="POST" action="{% if client %}/admin/clients/{{ client.id }}/edit{% else %}/admin/clients/new{% endif %}" class="space-y-6">
+            <!-- Client Name -->
+            <div>
+                <label for="name" class="block text-sm font-medium text-gray-700 mb-2">
+                    Client Name *
+                </label>
+                <input
+                    type="text"
+                    id="name"
+                    name="name"
+                    required
+                    value="{% if client %}{{ client.name }}{% endif %}"
+                    class="w-full px-3 py-2 rounded-md"
+                    placeholder="My Company"
+                >
+                <p class="mt-1 text-xs text-gray-500">A friendly name to identify this client</p>
+            </div>
+
+            <!-- SMTP Host -->
+            <div>
+                <label for="smtp_host" class="block text-sm font-medium text-gray-700 mb-2">
+                    SMTP Host *
+                </label>
+                <input
+                    type="text"
+                    id="smtp_host"
+                    name="smtp_host"
+                    required
+                    value="{% if client %}{{ client.smtp_host }}{% endif %}"
+                    class="w-full px-3 py-2 rounded-md"
+                    placeholder="smtp.gmail.com"
+                >
+            </div>
+
+            <!-- SMTP Port -->
+            <div>
+                <label for="smtp_port" class="block text-sm font-medium text-gray-700 mb-2">
+                    SMTP Port *
+                </label>
+                <input
+                    type="number"
+                    id="smtp_port"
+                    name="smtp_port"
+                    required
+                    value="{% if client %}{{ client.smtp_port }}{% else %}587{% endif %}"
+                    class="w-full px-3 py-2 rounded-md"
+                    placeholder="587"
+                    min="1"
+                    max="65535"
+                >
+                <p class="mt-1 text-xs text-gray-500">Common ports: 587 (TLS), 465 (SSL), 25 (unencrypted)</p>
+            </div>
+
+            <!-- SMTP Username -->
+            <div>
+                <label for="smtp_username" class="block text-sm font-medium text-gray-700 mb-2">
+                    SMTP Username *
+                </label>
+                <input
+                    type="text"
+                    id="smtp_username"
+                    name="smtp_username"
+                    required
+                    value="{% if client %}{{ client.smtp_username }}{% endif %}"
+                    class="w-full px-3 py-2 rounded-md"
+                    placeholder="user@example.com"
+                >
+            </div>
+
+            <!-- SMTP Password -->
+            <div>
+                <label for="smtp_password" class="block text-sm font-medium text-gray-700 mb-2">
+                    SMTP Password {% if not client %}*{% endif %}
+                </label>
+                <input
+                    type="password"
+                    id="smtp_password"
+                    name="smtp_password"
+                    {% if not client %}required{% endif %}
+                    class="w-full px-3 py-2 rounded-md"
+                    placeholder="{% if client %}Leave blank to keep current password{% else %}Enter password{% endif %}"
+                >
+                {% if client %}
+                <p class="mt-1 text-xs text-gray-500">Leave blank to keep the current password</p>
+                {% endif %}
+            </div>
+
+            <!-- Use TLS -->
+            <div class="flex items-center">
+                <input
+                    type="checkbox"
+                    id="use_tls"
+                    name="use_tls"
+                    class="h-4 w-4 rounded"
+                    {% if client and client.use_tls %}checked{% elif not client %}checked{% endif %}
+                >
+                <label for="use_tls" class="ml-2 block text-sm text-gray-700">
+                    Use TLS/STARTTLS
+                </label>
+            </div>
+
+            <!-- From Email -->
+            <div>
+                <label for="from_email" class="block text-sm font-medium text-gray-700 mb-2">
+                    Default From Email *
+                </label>
+                <input
+                    type="email"
+                    id="from_email"
+                    name="from_email"
+                    required
+                    value="{% if client %}{{ client.from_email }}{% endif %}"
+                    class="w-full px-3 py-2 rounded-md"
+                    placeholder="noreply@example.com"
+                >
+                <p class="mt-1 text-xs text-gray-500">Default sender email address for this client</p>
+            </div>
+
+            <!-- From Name -->
+            <div>
+                <label for="from_name" class="block text-sm font-medium text-gray-700 mb-2">
+                    Default From Name
+                </label>
+                <input
+                    type="text"
+                    id="from_name"
+                    name="from_name"
+                    value="{% if client %}{{ client.from_name or '' }}{% endif %}"
+                    class="w-full px-3 py-2 rounded-md"
+                    placeholder="My Company"
+                >
+                <p class="mt-1 text-xs text-gray-500">Default sender name (optional)</p>
+            </div>
+
+            <!-- Active Status -->
+            <div class="flex items-center">
+                <input
+                    type="checkbox"
+                    id="is_active"
+                    name="is_active"
+                    class="h-4 w-4 rounded"
+                    {% if client and client.is_active %}checked{% elif not client %}checked{% endif %}
+                >
+                <label for="is_active" class="ml-2 block text-sm text-gray-700">
+                    Client is active
+                </label>
+            </div>
+
+            <!-- Buttons -->
+            <div class="flex items-center justify-between pt-6 border-t border-gray-200">
+                <a href="/admin/clients" class="text-sm text-gray-700 hover:text-gray-900 underline">
+                    Cancel
+                </a>
+                <button
+                    type="submit"
+                    class="btn btn-primary px-6 py-2 rounded-md font-medium"
+                >
+                    {% if client %}Update Client{% else %}Create Client{% endif %}
+                </button>
+            </div>
+        </form>
+    </div>
+
+    {% if client %}
+    <!-- Danger Zone -->
+    <div class="mt-8 card p-6 border-red-300">
+        <h3 class="text-lg font-semibold text-red-900 mb-2">Danger Zone</h3>
+        <p class="text-sm text-gray-600 mb-4">Deleting a client will also delete all associated API keys and email logs.</p>
+        <form method="POST" action="/admin/clients/{{ client.id }}/delete" onsubmit="return confirm('Are you sure you want to delete this client? This action cannot be undone.');">
+            <button type="submit" class="btn px-4 py-2 rounded-md border-red-600 text-red-600 hover:bg-red-600 hover:text-white">
+                Delete Client
+            </button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

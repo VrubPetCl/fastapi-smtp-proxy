@@ -345,6 +345,329 @@ async def analytics_page(
     return RedirectResponse(url="/admin/dashboard", status_code=302)
 
 
+# ============================================================================
+# Client Management Routes
+# ============================================================================
+
+@router.get("/admin/clients/new", response_class=HTMLResponse)
+async def new_client_page(
+    request: Request,
+    session: dict = Depends(require_admin),
+):
+    """Display new client form."""
+    return templates.TemplateResponse(
+        "client_form.html",
+        {"request": request, "session": session, "client": None}
+    )
+
+
+@router.post("/admin/clients/new")
+async def create_client(
+    request: Request,
+    name: str = Form(...),
+    smtp_host: str = Form(...),
+    smtp_port: int = Form(...),
+    smtp_username: str = Form(...),
+    smtp_password: str = Form(...),
+    from_email: str = Form(...),
+    from_name: Optional[str] = Form(None),
+    use_tls: bool = Form(False),
+    is_active: bool = Form(False),
+    session: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Create new client."""
+    # Create new client
+    client = Client(
+        name=name,
+        smtp_host=smtp_host,
+        smtp_port=smtp_port,
+        smtp_username=smtp_username,
+        smtp_password=smtp_password,  # In production, encrypt this
+        from_email=from_email,
+        from_name=from_name,
+        use_tls=use_tls,
+        is_active=is_active
+    )
+
+    db.add(client)
+    await db.commit()
+    await db.refresh(client)
+
+    return RedirectResponse(url=f"/admin/clients/{client.id}", status_code=302)
+
+
+@router.get("/admin/clients/{client_id}", response_class=HTMLResponse)
+async def client_detail(
+    request: Request,
+    client_id: int,
+    session: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Display client details."""
+    # Get client
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    # Get statistics
+    api_key_count = await db.scalar(
+        select(func.count()).select_from(APIKey).where(APIKey.client_id == client_id)
+    )
+
+    result = await db.execute(
+        select(
+            func.count(EmailLog.id).label('total'),
+            func.sum(case((EmailLog.status == 'sent', 1), else_=0)).label('sent'),
+            func.sum(case((EmailLog.status == 'failed', 1), else_=0)).label('failed')
+        ).where(EmailLog.client_id == client_id)
+    )
+    email_stats = result.first()
+
+    total_emails = email_stats.total if email_stats.total else 0
+    emails_sent = email_stats.sent if email_stats.sent else 0
+    emails_failed = email_stats.failed if email_stats.failed else 0
+    success_rate = (emails_sent / total_emails * 100) if total_emails > 0 else 0
+
+    # Get recent emails
+    result = await db.execute(
+        select(EmailLog)
+        .where(EmailLog.client_id == client_id)
+        .order_by(EmailLog.sent_at.desc())
+        .limit(10)
+    )
+    recent_emails = result.scalars().all()
+
+    stats = {
+        "api_key_count": api_key_count,
+        "total_emails": total_emails,
+        "emails_sent": emails_sent,
+        "emails_failed": emails_failed,
+        "success_rate": success_rate
+    }
+
+    return templates.TemplateResponse(
+        "client_detail.html",
+        {
+            "request": request,
+            "session": session,
+            "client": client,
+            "stats": stats,
+            "recent_emails": recent_emails
+        }
+    )
+
+
+@router.get("/admin/clients/{client_id}/edit", response_class=HTMLResponse)
+async def edit_client_page(
+    request: Request,
+    client_id: int,
+    session: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Display edit client form."""
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    return templates.TemplateResponse(
+        "client_form.html",
+        {"request": request, "session": session, "client": client}
+    )
+
+
+@router.post("/admin/clients/{client_id}/edit")
+async def update_client(
+    request: Request,
+    client_id: int,
+    name: str = Form(...),
+    smtp_host: str = Form(...),
+    smtp_port: int = Form(...),
+    smtp_username: str = Form(...),
+    smtp_password: Optional[str] = Form(None),
+    from_email: str = Form(...),
+    from_name: Optional[str] = Form(None),
+    use_tls: bool = Form(False),
+    is_active: bool = Form(False),
+    session: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Update client."""
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    # Update fields
+    client.name = name
+    client.smtp_host = smtp_host
+    client.smtp_port = smtp_port
+    client.smtp_username = smtp_username
+    client.from_email = from_email
+    client.from_name = from_name
+    client.use_tls = use_tls
+    client.is_active = is_active
+
+    # Only update password if provided
+    if smtp_password and smtp_password.strip():
+        client.smtp_password = smtp_password  # In production, encrypt this
+
+    await db.commit()
+
+    return RedirectResponse(url=f"/admin/clients/{client_id}", status_code=302)
+
+
+@router.post("/admin/clients/{client_id}/delete")
+async def delete_client(
+    client_id: int,
+    session: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete client."""
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    await db.delete(client)
+    await db.commit()
+
+    return RedirectResponse(url="/admin/clients", status_code=302)
+
+
+# ============================================================================
+# API Key Management Routes
+# ============================================================================
+
+@router.get("/admin/clients/{client_id}/keys", response_class=HTMLResponse)
+async def client_keys(
+    request: Request,
+    client_id: int,
+    session: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Display client API keys."""
+    # Get client
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    # Get API keys
+    result = await db.execute(
+        select(APIKey)
+        .where(APIKey.client_id == client_id)
+        .order_by(APIKey.created_at.desc())
+    )
+    api_keys = result.scalars().all()
+
+    # Check if we just created a new key (passed via query param)
+    new_api_key = request.query_params.get("new_key")
+
+    return templates.TemplateResponse(
+        "client_keys.html",
+        {
+            "request": request,
+            "session": session,
+            "client": client,
+            "api_keys": api_keys,
+            "new_api_key": new_api_key
+        }
+    )
+
+
+@router.get("/admin/clients/{client_id}/keys/new", response_class=HTMLResponse)
+async def new_api_key_page(
+    request: Request,
+    client_id: int,
+    session: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Display new API key form."""
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    return templates.TemplateResponse(
+        "api_key_form.html",
+        {"request": request, "session": session, "client": client}
+    )
+
+
+@router.post("/admin/clients/{client_id}/keys/new")
+async def create_api_key(
+    client_id: int,
+    description: Optional[str] = Form(None),
+    session: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Generate new API key."""
+    import secrets
+
+    # Get client
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+
+    # Generate API key
+    api_key = f"smtp_{secrets.token_urlsafe(32)}"
+
+    # Create API key record
+    key_record = APIKey(
+        client_id=client_id,
+        key_hash=api_key,  # In production, hash this
+        key_prefix=api_key[:12],
+        key_suffix=api_key[-4:],
+        description=description,
+        is_active=True
+    )
+
+    db.add(key_record)
+    await db.commit()
+
+    # Redirect back to keys page with the new key in the URL
+    return RedirectResponse(
+        url=f"/admin/clients/{client_id}/keys?new_key={api_key}",
+        status_code=302
+    )
+
+
+@router.post("/admin/clients/{client_id}/keys/{key_id}/revoke")
+async def revoke_api_key(
+    client_id: int,
+    key_id: int,
+    session: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """Revoke API key."""
+    result = await db.execute(
+        select(APIKey).where(
+            APIKey.id == key_id,
+            APIKey.client_id == client_id
+        )
+    )
+    api_key = result.scalar_one_or_none()
+
+    if not api_key:
+        raise HTTPException(status_code=404, detail="API key not found")
+
+    api_key.is_active = False
+    await db.commit()
+
+    return RedirectResponse(url=f"/admin/clients/{client_id}/keys", status_code=302)
+
+
 @router.get("/admin", response_class=HTMLResponse)
 async def admin_root(request: Request):
     """Redirect /admin to /admin/dashboard or /admin/login."""

@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}API Keys - {{ client.name }} - SMTP Proxy Admin{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mb-8 flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">API Keys</h1>
+            <p class="mt-2 text-gray-600">Manage API keys for {{ client.name }}</p>
+        </div>
+        <div class="flex space-x-3">
+            <a href="/admin/clients/{{ client.id }}" class="btn px-4 py-2 rounded-md">
+                Back to Client
+            </a>
+            <a href="/admin/clients/{{ client.id }}/keys/new" class="btn btn-primary px-4 py-2 rounded-md">
+                + Generate New Key
+            </a>
+        </div>
+    </div>
+
+    <!-- New API Key Display (if just created) -->
+    {% if new_api_key %}
+    <div class="card p-6 mb-6 border-green-500 bg-green-50">
+        <h2 class="text-lg font-semibold text-green-900 mb-4">✓ New API Key Generated</h2>
+        <p class="text-sm text-green-800 mb-4">
+            <strong>Important:</strong> This is the only time you'll see the full API key. Please copy it now and store it securely.
+        </p>
+        <div class="bg-white p-4 rounded border border-green-300 font-mono text-sm break-all">
+            {{ new_api_key }}
+        </div>
+        <button onclick="copyToClipboard('{{ new_api_key }}')" class="mt-4 btn btn-primary px-4 py-2 rounded-md text-sm">
+            Copy to Clipboard
+        </button>
+    </div>
+    {% endif %}
+
+    <!-- API Keys Table -->
+    <div class="card overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        API Key
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Description
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Last Used
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Created
+                    </th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                    </th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200">
+                {% if api_keys %}
+                    {% for key in api_keys %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <div class="text-sm font-mono text-gray-900">
+                                {{ key.key_prefix }}...{{ key.key_suffix }}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-sm text-gray-900">
+                                {% if key.description %}
+                                    {{ key.description }}
+                                {% else %}
+                                    <span class="text-gray-400">No description</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            {% if key.is_active %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                Active
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                Revoked
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {% if key.last_used_at %}
+                                {{ key.last_used_at.strftime('%Y-%m-%d %H:%M') }}
+                            {% else %}
+                                <span class="text-gray-400">Never</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                            {{ key.created_at.strftime('%Y-%m-%d') }}
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            {% if key.is_active %}
+                            <form method="POST" action="/admin/clients/{{ client.id }}/keys/{{ key.id }}/revoke" style="display: inline;" onsubmit="return confirm('Are you sure you want to revoke this API key? This action cannot be undone.');">
+                                <button type="submit" class="text-red-600 hover:text-red-900 underline">
+                                    Revoke
+                                </button>
+                            </form>
+                            {% else %}
+                            <span class="text-gray-400">Revoked</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="6" class="px-6 py-12 text-center text-sm text-gray-500">
+                            No API keys found. <a href="/admin/clients/{{ client.id }}/keys/new" class="text-gray-900 underline">Generate your first API key</a>
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Info Box -->
+    <div class="mt-6 card p-6 bg-blue-50 border-blue-200">
+        <h3 class="text-sm font-semibold text-blue-900 mb-2">About API Keys</h3>
+        <ul class="text-sm text-blue-800 space-y-1 list-disc list-inside">
+            <li>API keys are used to authenticate requests to the SMTP proxy</li>
+            <li>Each key can be revoked independently without affecting other keys</li>
+            <li>Track when keys were last used to identify inactive keys</li>
+            <li>Add descriptions to keys to remember their purpose</li>
+            <li>Revoked keys cannot be reactivated - generate a new key instead</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(function() {
+        alert('API key copied to clipboard!');
+    }, function(err) {
+        console.error('Could not copy text: ', err);
+    });
+}
+</script>
+{% endblock %}

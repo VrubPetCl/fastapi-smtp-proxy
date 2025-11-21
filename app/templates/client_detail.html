@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}{{ client.name }} - SMTP Proxy Admin{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mb-8 flex justify-between items-center">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">{{ client.name }}</h1>
+            <p class="mt-2 text-gray-600">Client configuration and statistics</p>
+        </div>
+        <div class="flex space-x-3">
+            <a href="/admin/clients/{{ client.id }}/keys" class="btn px-4 py-2 rounded-md">
+                Manage API Keys
+            </a>
+            <a href="/admin/clients/{{ client.id }}/edit" class="btn btn-primary px-4 py-2 rounded-md">
+                Edit Client
+            </a>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Client Details -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Basic Information -->
+            <div class="card p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Basic Information</h2>
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Client Name</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ client.name }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Status</dt>
+                        <dd class="mt-1">
+                            {% if client.is_active %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                Active
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                Inactive
+                            </span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Created</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ client.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</dd>
+                    </div>
+                </dl>
+            </div>
+
+            <!-- SMTP Configuration -->
+            <div class="card p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">SMTP Configuration</h2>
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">SMTP Host</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ client.smtp_host }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">SMTP Port</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ client.smtp_port }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">SMTP Username</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ client.smtp_username }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Use TLS</dt>
+                        <dd class="mt-1 text-sm text-gray-900">
+                            {% if client.use_tls %}
+                            <span class="text-green-600">✓ Enabled</span>
+                            {% else %}
+                            <span class="text-gray-500">✗ Disabled</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Default From Email</dt>
+                        <dd class="mt-1 text-sm text-gray-900 font-mono">{{ client.from_email }}</dd>
+                    </div>
+                    {% if client.from_name %}
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Default From Name</dt>
+                        <dd class="mt-1 text-sm text-gray-900">{{ client.from_name }}</dd>
+                    </div>
+                    {% endif %}
+                </dl>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="card p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Recent Emails</h2>
+                <div class="space-y-3">
+                    {% if recent_emails %}
+                        {% for email in recent_emails %}
+                        <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                            <div class="flex-1 min-w-0">
+                                <p class="text-sm font-medium text-gray-900 truncate">
+                                    {{ email.subject }}
+                                </p>
+                                <p class="text-xs text-gray-500 mt-1">
+                                    {{ email.sent_at.strftime('%Y-%m-%d %H:%M') }}
+                                </p>
+                            </div>
+                            <div class="ml-4">
+                                {% if email.status == 'sent' %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                    Sent
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                    Failed
+                                </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-sm text-gray-500 text-center py-8">No emails sent yet</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Sidebar -->
+        <div class="space-y-6">
+            <!-- Statistics -->
+            <div class="card p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Statistics</h2>
+                <dl class="space-y-4">
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">API Keys</dt>
+                        <dd class="mt-1 text-2xl font-bold text-gray-900">{{ stats.api_key_count }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Total Emails</dt>
+                        <dd class="mt-1 text-2xl font-bold text-gray-900">{{ stats.total_emails }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Emails Sent</dt>
+                        <dd class="mt-1 text-2xl font-bold text-green-600">{{ stats.emails_sent }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Emails Failed</dt>
+                        <dd class="mt-1 text-2xl font-bold text-red-600">{{ stats.emails_failed }}</dd>
+                    </div>
+                    <div>
+                        <dt class="text-sm font-medium text-gray-500">Success Rate</dt>
+                        <dd class="mt-1 text-2xl font-bold {% if stats.success_rate >= 95 %}text-green-600{% elif stats.success_rate >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                            {{ "%.1f"|format(stats.success_rate) }}%
+                        </dd>
+                    </div>
+                </dl>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="card p-6">
+                <h2 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
+                <div class="space-y-3">
+                    <a href="/admin/clients/{{ client.id }}/keys" class="btn w-full px-4 py-2 rounded-md text-center block">
+                        Manage API Keys
+                    </a>
+                    <a href="/admin/clients/{{ client.id }}/edit" class="btn w-full px-4 py-2 rounded-md text-center block">
+                        Edit Configuration
+                    </a>
+                    <a href="/admin/clients" class="btn w-full px-4 py-2 rounded-md text-center block">
+                        Back to Clients
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
