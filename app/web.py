@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict
 from collections import defaultdict
-from fastapi import APIRouter, Request, Depends, Form, HTTPException, status as http_status
+from fastapi import APIRouter, Request, Depends, Form, File, UploadFile, HTTPException, status as http_status
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -648,14 +648,18 @@ async def delete_client(
 async def send_test_email(
     client_id: int,
     test_email: str = Form(...),
+    attachment: Optional[UploadFile] = File(None),
     session: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Send a test email to verify SMTP configuration."""
+    """Send a test email to verify SMTP configuration with optional attachment."""
     import logging
     import io
+    import base64
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
+    from email.mime.base import MIMEBase
+    from email import encoders
     from pydantic import EmailStr, ValidationError
 
     # Collect logs
@@ -794,6 +798,55 @@ From: FastAPI SMTP Proxy
         part2 = MIMEText(html_content, 'html')
         msg.attach(part1)
         msg.attach(part2)
+
+        # Add attachment if provided
+        if attachment and attachment.filename:
+            test_logger.info(f"Processing attachment: {attachment.filename}")
+
+            try:
+                # Read file content
+                file_content = await attachment.read()
+                file_size_mb = len(file_content) / 1024 / 1024
+
+                # Check size limit (25MB)
+                if len(file_content) > 25 * 1024 * 1024:
+                    test_logger.error(f"Attachment too large: {file_size_mb:.2f}MB (max 25MB)")
+                    return JSONResponse(
+                        content={
+                            "success": False,
+                            "error": f"Attachment too large: {file_size_mb:.2f}MB. Maximum size is 25MB.",
+                            "logs": log_stream.getvalue().split('\n')
+                        },
+                        status_code=400
+                    )
+
+                test_logger.info(f"Attachment size: {file_size_mb:.2f}MB")
+
+                # Create attachment part
+                content_type = attachment.content_type or 'application/octet-stream'
+                main_type, sub_type = content_type.split('/', 1) if '/' in content_type else ('application', 'octet-stream')
+
+                part = MIMEBase(main_type, sub_type)
+                part.set_payload(file_content)
+                encoders.encode_base64(part)
+                part.add_header(
+                    'Content-Disposition',
+                    f'attachment; filename="{attachment.filename}"'
+                )
+
+                msg.attach(part)
+                test_logger.info(f"Attachment added successfully: {attachment.filename}")
+
+            except Exception as e:
+                test_logger.error(f"Failed to process attachment: {str(e)}")
+                return JSONResponse(
+                    content={
+                        "success": False,
+                        "error": f"Failed to process attachment: {str(e)}",
+                        "logs": log_stream.getvalue().split('\n')
+                    },
+                    status_code=400
+                )
 
         # Send email using SMTP
         test_logger.info(f"Connecting to SMTP server: {client.smtp_host}:{client.smtp_port}")

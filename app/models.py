@@ -1,7 +1,80 @@
 """Pydantic models for API request/response validation."""
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from typing import List, Optional, Dict
 from datetime import datetime
+import base64
+
+
+class AttachmentModel(BaseModel):
+    """Model for email attachments."""
+
+    filename: str = Field(..., min_length=1, max_length=255, description="Attachment filename")
+    content: str = Field(..., description="Base64 encoded file content")
+    content_type: str = Field(default="application/octet-stream", description="MIME type")
+
+    @field_validator('filename')
+    @classmethod
+    def validate_filename(cls, v: str) -> str:
+        """Validate filename doesn't contain dangerous characters."""
+        dangerous_chars = ['/', '\\', '\0', '..']
+        for char in dangerous_chars:
+            if char in v:
+                raise ValueError(f'Filename contains invalid character: {char}')
+        return v
+
+    @field_validator('content')
+    @classmethod
+    def validate_content(cls, v: str) -> str:
+        """Validate content is valid base64 and within size limits."""
+        try:
+            # Validate base64
+            decoded = base64.b64decode(v, validate=True)
+
+            # Check size (25MB limit per attachment)
+            max_size = 25 * 1024 * 1024  # 25MB
+            if len(decoded) > max_size:
+                raise ValueError(f'Attachment too large. Max size: 25MB, got: {len(decoded) / 1024 / 1024:.2f}MB')
+
+            return v
+        except Exception as e:
+            raise ValueError(f'Invalid base64 content: {str(e)}')
+
+    @field_validator('content_type')
+    @classmethod
+    def validate_content_type(cls, v: str) -> str:
+        """Validate content type format."""
+        if '/' not in v:
+            raise ValueError('Content type must be in format: type/subtype')
+
+        # Common safe content types
+        safe_types = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/zip',
+            'application/x-zip-compressed',
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/svg+xml',
+            'text/plain',
+            'text/csv',
+            'text/html',
+            'application/json',
+            'application/xml',
+            'application/octet-stream',
+        ]
+
+        # Allow any subtype of safe main types
+        main_type = v.split('/')[0]
+        safe_main_types = ['image', 'text', 'application', 'audio', 'video']
+
+        if v not in safe_types and main_type not in safe_main_types:
+            raise ValueError(f'Content type not allowed: {v}')
+
+        return v
 
 
 class EmailRequest(BaseModel):
@@ -18,7 +91,7 @@ class EmailRequest(BaseModel):
     reply_to: Optional[EmailStr] = Field(None, description="Reply-to email address")
     cc: Optional[List[EmailStr]] = Field(default=None, description="CC recipients")
     bcc: Optional[List[EmailStr]] = Field(default=None, description="BCC recipients")
-    attachments: Optional[List[dict]] = Field(default=None, description="Email attachments")
+    attachments: Optional[List[AttachmentModel]] = Field(default=None, description="Email attachments")
 
     @field_validator('content_type')
     @classmethod
@@ -27,6 +100,24 @@ class EmailRequest(BaseModel):
         if v not in ['text/html', 'text/plain']:
             raise ValueError('content_type must be either "text/html" or "text/plain"')
         return v
+
+    @model_validator(mode='after')
+    def validate_attachments_total_size(self) -> 'EmailRequest':
+        """Validate total attachment size doesn't exceed limit."""
+        if self.attachments:
+            total_size = 0
+            for attachment in self.attachments:
+                decoded = base64.b64decode(attachment.content)
+                total_size += len(decoded)
+
+            # 50MB total limit
+            max_total_size = 50 * 1024 * 1024
+            if total_size > max_total_size:
+                raise ValueError(
+                    f'Total attachments too large. Max: 50MB, got: {total_size / 1024 / 1024:.2f}MB'
+                )
+
+        return self
 
     @field_validator('timestamp')
     @classmethod

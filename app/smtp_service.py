@@ -162,24 +162,18 @@ class SMTPService:
 
         return message
 
-    def _add_attachment(self, message: MIMEMultipart, attachment: dict):
+    def _add_attachment(self, message: MIMEMultipart, attachment):
         """
         Add an attachment to the email message.
 
         Args:
             message: The MIME message to attach to
-            attachment: Dictionary containing attachment data
-                Expected format:
-                {
-                    "filename": "file.pdf",
-                    "content": "base64_encoded_content",
-                    "content_type": "application/pdf"  # optional
-                }
+            attachment: AttachmentModel containing attachment data
         """
         try:
-            filename = attachment.get('filename', 'attachment')
-            content = attachment.get('content', '')
-            content_type = attachment.get('content_type', 'application/octet-stream')
+            filename = attachment.filename
+            content = attachment.content
+            content_type = attachment.content_type
 
             # Decode base64 content
             file_data = base64.b64decode(content)
@@ -189,17 +183,17 @@ class SMTPService:
             part.set_payload(file_data)
             encoders.encode_base64(part)
 
-            # Add header
+            # Add header with proper filename encoding
             part.add_header(
                 'Content-Disposition',
-                f'attachment; filename= {filename}'
+                f'attachment; filename="{filename}"'
             )
 
             message.attach(part)
-            logger.debug(f"Added attachment: {filename}")
+            logger.debug(f"Added attachment: {filename} ({len(file_data)} bytes)")
 
         except Exception as e:
-            logger.error(f"Failed to add attachment {attachment.get('filename')}: {str(e)}")
+            logger.error(f"Failed to add attachment {getattr(attachment, 'filename', 'unknown')}: {str(e)}")
             # Continue without this attachment rather than failing completely
 
     async def _send_via_smtp(self, message: MIMEMultipart, recipients: List[str]) -> str:

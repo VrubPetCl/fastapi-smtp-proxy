@@ -213,6 +213,23 @@
                     <p class="mt-1 text-xs text-gray-500">Enter the email address where you want to receive the test email</p>
                 </div>
 
+                <div>
+                    <label for="test_attachment" class="block text-sm font-medium text-gray-700 mb-2">
+                        Attachment (Optional)
+                    </label>
+                    <input
+                        type="file"
+                        id="test_attachment"
+                        name="test_attachment"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.jpg,.jpeg,.png,.gif,.zip"
+                    >
+                    <p class="mt-1 text-xs text-gray-500">
+                        Max 25MB. Supported: PDF, Word, Excel, Images, ZIP, Text files
+                    </p>
+                    <div id="attachmentInfo" class="mt-2 text-xs text-gray-600 hidden"></div>
+                </div>
+
                 <div id="testResultContainer" class="hidden">
                     <div id="testResultSuccess" class="hidden p-4 mb-4 rounded-md bg-green-50 border border-green-200">
                         <div class="flex">
@@ -296,11 +313,34 @@
         }
     });
 
+    // Show attachment info when file is selected
+    document.getElementById('test_attachment').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        const infoDiv = document.getElementById('attachmentInfo');
+
+        if (file) {
+            const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+            infoDiv.textContent = `Selected: ${file.name} (${sizeMB} MB)`;
+            infoDiv.classList.remove('hidden');
+
+            if (file.size > 25 * 1024 * 1024) {
+                infoDiv.classList.add('text-red-600');
+                infoDiv.textContent += ' - File too large!';
+            } else {
+                infoDiv.classList.remove('text-red-600');
+            }
+        } else {
+            infoDiv.classList.add('hidden');
+        }
+    });
+
     // Handle form submission
     document.getElementById('testEmailForm').addEventListener('submit', async function(e) {
         e.preventDefault();
 
         const email = document.getElementById('test_email').value;
+        const fileInput = document.getElementById('test_attachment');
+        const file = fileInput.files[0];
         const button = document.getElementById('sendTestButton');
         const originalButtonText = button.textContent;
 
@@ -315,14 +355,18 @@
         document.getElementById('testLogs').classList.add('hidden');
 
         try {
+            // Prepare form data
+            const formData = new FormData();
+            formData.append('test_email', email);
+
+            // Add attachment if present
+            if (file) {
+                formData.append('attachment', file);
+            }
+
             const response = await fetch('/admin/clients/{{ client.id }}/test-email', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-                body: new URLSearchParams({
-                    'test_email': email
-                })
+                body: formData
             });
 
             const data = await response.json();
