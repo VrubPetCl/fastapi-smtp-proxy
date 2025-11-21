@@ -241,7 +241,9 @@ async def dashboard(
     result = await db.execute(
         select(
             func.count(EmailLog.id).label('total'),
-            func.sum(func.case((EmailLog.status == 'sent', 1), else_=0)).label('sent')
+            func.sum(
+                case((EmailLog.status == 'sent', 1), else_=0)
+            ).label('sent')
         ).where(EmailLog.sent_at >= thirty_days_ago)
     )
     email_stats = result.first()
