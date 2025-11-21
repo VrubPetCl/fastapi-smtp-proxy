@@ -1137,10 +1137,8 @@ async def create_api_key(
     # Create API key record
     key_record = APIKey(
         client_id=client_id,
+        name=description,  # Use 'name' field instead of 'description'
         key_hash=api_key,  # In production, hash this
-        key_prefix=api_key[:12],
-        key_suffix=api_key[-4:],
-        description=description,
         is_active=True
     )
 
