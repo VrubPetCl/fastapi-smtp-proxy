@@ -6,7 +6,7 @@ from fastapi import APIRouter, Request, Depends, Form, HTTPException, status as 
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 from itsdangerous import URLSafeTimedSerializer
 from app.database import get_db
 from app.schemas import AdminUser, Client, APIKey, EmailLog
