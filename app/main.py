@@ -28,6 +28,7 @@ from app.analytics_service import (
     rotate_old_quarters, archive_quarter
 )
 from app.models import AnalyticsSummary, AnalyticsSnapshotResponse, RotationSummary
+from app import web
 
 # Configure logging
 logging.basicConfig(
@@ -65,6 +66,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include web routes
+app.include_router(web.router)
 
 
 @app.get("/")

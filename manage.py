@@ -5,8 +5,9 @@ import sys
 from datetime import datetime
 from sqlalchemy import select
 from app.database import AsyncSessionLocal, init_db
-from app.schemas import Client, APIKey
+from app.schemas import Client, APIKey, AdminUser
 from app.auth import create_api_key
+from app.web_auth import create_admin_user, hash_password
 from app.config import settings
 from app.analytics_service import (
     get_current_quarter, calculate_analytics_snapshot,
@@ -301,6 +302,79 @@ async def show_analytics_cli():
         print()
 
 
+async def create_admin_cli():
+    """Create a new admin user."""
+    print("\n=== Create New Admin User ===\n")
+
+    username = input("Username: ").strip()
+    email = input("Email: ").strip()
+    full_name = input("Full Name (optional): ").strip() or None
+    password = input("Password: ").strip()
+    confirm_password = input("Confirm Password: ").strip()
+
+    if password != confirm_password:
+        print("\n❌ Error: Passwords do not match!")
+        return
+
+    is_superuser_input = input("Make superuser? [y/N]: ").strip().lower()
+    is_superuser = is_superuser_input == 'y'
+
+    async with AsyncSessionLocal() as db:
+        # Check if username exists
+        result = await db.execute(select(AdminUser).where(AdminUser.username == username))
+        if result.scalar_one_or_none():
+            print(f"\n❌ Error: Username '{username}' already exists!")
+            return
+
+        # Check if email exists
+        result = await db.execute(select(AdminUser).where(AdminUser.email == email))
+        if result.scalar_one_or_none():
+            print(f"\n❌ Error: Email '{email}' already exists!")
+            return
+
+        # Create admin user
+        admin = await create_admin_user(
+            db=db,
+            username=username,
+            email=email,
+            password=password,
+            full_name=full_name,
+            is_superuser=is_superuser
+        )
+
+        print(f"\n✅ Admin user created successfully!")
+        print(f"   ID: {admin.id}")
+        print(f"   Username: {admin.username}")
+        print(f"   Email: {admin.email}")
+        print(f"   Superuser: {'Yes' if admin.is_superuser else 'No'}")
+
+
+async def list_admins_cli():
+    """List all admin users."""
+    print("\n=== Admin Users ===\n")
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(AdminUser).order_by(AdminUser.id))
+        admins = result.scalars().all()
+
+        if not admins:
+            print("No admin users found.")
+            return
+
+        for admin in admins:
+            status = "✓ Active" if admin.is_active else "✗ Inactive"
+            superuser = "★ Superuser" if admin.is_superuser else ""
+            print(f"ID: {admin.id}")
+            print(f"  Username: {admin.username}")
+            print(f"  Email: {admin.email}")
+            print(f"  Full Name: {admin.full_name or 'N/A'}")
+            print(f"  Status: {status} {superuser}")
+            print(f"  Created: {admin.created_at}")
+            if admin.last_login_at:
+                print(f"  Last Login: {admin.last_login_at}")
+            print()
+
+
 async def main():
     """Main CLI entry point."""
     # Initialize database
@@ -309,6 +383,9 @@ async def main():
     if len(sys.argv) < 2:
         print("\nFastAPI SMTP Proxy - Management CLI")
         print("\nUsage: python manage.py <command>")
+        print("\nAdmin Management:")
+        print("  create-admin      Create a new admin user")
+        print("  list-admins       List all admin users")
         print("\nClient Management:")
         print("  create-client     Create a new client")
         print("  list-clients      List all clients")
@@ -324,7 +401,11 @@ async def main():
 
     command = sys.argv[1]
 
-    if command == "create-client":
+    if command == "create-admin":
+        await create_admin_cli()
+    elif command == "list-admins":
+        await list_admins_cli()
+    elif command == "create-client":
         await create_client_cli()
     elif command == "list-clients":
         await list_clients_cli()

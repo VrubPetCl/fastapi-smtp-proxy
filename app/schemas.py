@@ -216,3 +216,45 @@ class AnalyticsSnapshot(Base):
     __table_args__ = (
         Index('idx_analytics_client_period', 'client_id', 'year', 'quarter', 'month'),
     )
+
+
+class AdminUser(Base):
+    """Admin user model for dashboard access."""
+
+    __tablename__ = "admin_users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(255), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    full_name = Column(String(255), nullable=True)
+
+    # Permissions
+    is_active = Column(Boolean, default=True, nullable=False)
+    is_superuser = Column(Boolean, default=False, nullable=False)
+
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_login_at = Column(DateTime, nullable=True)
+
+    # Relationships
+    password_reset_tokens = relationship("PasswordResetToken", back_populates="admin_user", cascade="all, delete-orphan")
+
+
+class PasswordResetToken(Base):
+    """Password reset token model."""
+
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    admin_user_id = Column(Integer, ForeignKey("admin_users.id"), nullable=False)
+    token = Column(String(255), unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    used_at = Column(DateTime, nullable=True)
+
+    # Metadata
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    admin_user = relationship("AdminUser", back_populates="password_reset_tokens")

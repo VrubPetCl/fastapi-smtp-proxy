@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - SMTP Proxy Admin{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Dashboard</h1>
+        <p class="mt-2 text-gray-600">Overview of your SMTP proxy system</p>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+        <!-- Total Clients -->
+        <div class="card p-6">
+            <div class="flex items-center">
+                <div class="flex-1">
+                    <p class="text-sm font-medium text-gray-600">Total Clients</p>
+                    <p class="mt-2 text-3xl font-bold text-gray-900">{{ stats.total_clients }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active API Keys -->
+        <div class="card p-6">
+            <div class="flex items-center">
+                <div class="flex-1">
+                    <p class="text-sm font-medium text-gray-600">Active API Keys</p>
+                    <p class="mt-2 text-3xl font-bold text-gray-900">{{ stats.active_api_keys }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Emails (30 days) -->
+        <div class="card p-6">
+            <div class="flex items-center">
+                <div class="flex-1">
+                    <p class="text-sm font-medium text-gray-600">Emails (30 days)</p>
+                    <p class="mt-2 text-3xl font-bold text-gray-900">{{ stats.total_emails }}</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Success Rate -->
+        <div class="card p-6">
+            <div class="flex items-center">
+                <div class="flex-1">
+                    <p class="text-sm font-medium text-gray-600">Success Rate</p>
+                    <p class="mt-2 text-3xl font-bold {% if stats.success_rate >= 95 %}text-green-600{% elif stats.success_rate >= 80 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                        {{ "%.1f"|format(stats.success_rate) }}%
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Recent Emails -->
+        <div class="card p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Recent Emails</h2>
+            <div class="space-y-3">
+                {% if recent_emails %}
+                    {% for email in recent_emails %}
+                    <div class="flex items-center justify-between py-3 border-b border-gray-100">
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-medium text-gray-900 truncate">
+                                {{ email.subject }}
+                            </p>
+                            <p class="text-xs text-gray-500 mt-1">
+                                {{ email.client_name }} • {{ email.sent_at.strftime('%Y-%m-%d %H:%M') }}
+                            </p>
+                        </div>
+                        <div class="ml-4">
+                            {% if email.status == 'sent' %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                Sent
+                            </span>
+                            {% else %}
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                Failed
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-sm text-gray-500 text-center py-8">No recent emails</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
+            <div class="space-y-3">
+                <a href="/admin/clients/new" class="btn w-full px-4 py-3 rounded-md text-center block">
+                    + Add New Client
+                </a>
+                <a href="/admin/analytics" class="btn w-full px-4 py-3 rounded-md text-center block">
+                    View Analytics
+                </a>
+                <a href="/admin/clients" class="btn w-full px-4 py-3 rounded-md text-center block">
+                    Manage Clients
+                </a>
+            </div>
+
+            <div class="mt-6 pt-6 border-t border-gray-200">
+                <h3 class="text-sm font-semibold text-gray-900 mb-3">System Status</h3>
+                <div class="space-y-2">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-600">Database</span>
+                        <span class="text-green-600 font-medium">● Online</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-600">SMTP Service</span>
+                        <span class="text-green-600 font-medium">● Running</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Chart Placeholder -->
+    <div class="mt-6 card p-6">
+        <h2 class="text-lg font-semibold text-gray-900 mb-4">Email Volume (Last 7 Days)</h2>
+        <div class="h-64 flex items-center justify-center border border-gray-200 rounded">
+            <p class="text-gray-500">Chart visualization would go here</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

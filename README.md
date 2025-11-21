@@ -251,6 +251,108 @@ python manage.py create-snapshot
 python manage.py rotate-data
 ```
 
+## Web Dashboard
+
+### Overview
+
+The SMTP Proxy includes a beautiful, minimalist web dashboard for managing clients, API keys, and viewing analytics. The dashboard features:
+
+- **Clean Design**: Inspired by the Skeleton framework with black/white/shadows aesthetic
+- **Responsive**: Works on desktop and mobile devices
+- **Secure**: Session-based authentication with password reset
+- **Real-time Stats**: View email volume, success rates, and performance metrics
+
+### Accessing the Dashboard
+
+1. **Create an admin user** (first time only):
+   ```bash
+   python manage.py create-admin
+   ```
+
+2. **Start the application**:
+   ```bash
+   python -m uvicorn app.main:app --reload
+   ```
+
+3. **Open your browser** and navigate to:
+   ```
+   http://localhost:8000/admin
+   ```
+
+4. **Login** with your admin credentials
+
+### Dashboard Features
+
+#### Login & Security
+- Secure session-based authentication
+- Password reset functionality
+- Remember me option
+- Auto-logout after inactivity
+
+#### Dashboard Overview
+- **Statistics Cards**: Total clients, active API keys, email count, success rate
+- **Recent Activity**: Latest emails sent with status
+- **Quick Actions**: Add clients, view analytics, manage API keys
+- **System Status**: Database and SMTP service health
+
+#### Client Management
+- View all SMTP clients
+- See API key counts per client
+- Check client status (active/inactive)
+- Quick access to client details and API keys
+
+#### Analytics
+- Detailed email statistics
+- Performance metrics
+- Error analysis
+- Usage trends
+
+### Dashboard Screens
+
+**Login Page** (`/admin/login`)
+- Clean, centered login form
+- Username/email and password fields
+- Forgot password link
+- Minimalist black and white design
+
+**Dashboard** (`/admin/dashboard`)
+- Overview statistics
+- Recent emails table
+- Quick action buttons
+- System status indicators
+
+**Clients** (`/admin/clients`)
+- Sortable client table
+- SMTP server information
+- API key counts
+- Status indicators
+
+**Password Reset**
+- Request reset link (`/admin/forgot-password`)
+- Set new password (`/admin/reset-password/{token}`)
+- Secure token-based system
+
+### Security Features
+
+- **Bcrypt Password Hashing**: Industry-standard password security
+- **Signed Sessions**: Tamper-proof session cookies using `itsdangerous`
+- **Token Expiration**: Reset tokens expire after 24 hours
+- **HTTPOnly Cookies**: Protection against XSS attacks
+
+### Customization
+
+The dashboard uses **Tailwind CSS** with a custom Skeleton-inspired theme:
+
+```css
+/* Main colors */
+Background: #FFFFFF
+Text: #222222
+Border: #D1D1D1
+Shadow: rgba(0,0,0,0.1)
+```
+
+To customize, edit `app/templates/base.html` and modify the Tailwind configuration or add custom CSS in the `<style>` block.
+
 ## Analytics & Data Retention
 
 ### Overview
