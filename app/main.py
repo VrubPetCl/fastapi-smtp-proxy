@@ -20,9 +20,14 @@ from app.models import (
     APIKeyCreate,
     APIKeyResponse,
 )
-from app.schemas import Client, APIKey, EmailLog
-from app.auth import get_current_client, create_api_key
+from app.schemas import Client, APIKey, EmailLog, AnalyticsSnapshot
+from app.auth import get_current_client, get_current_client_and_key, create_api_key
 from app.smtp_service import send_email
+from app.analytics_service import (
+    get_quarter, calculate_analytics_snapshot, get_analytics_summary,
+    rotate_old_quarters, archive_quarter
+)
+from app.models import AnalyticsSummary, AnalyticsSnapshotResponse, RotationSummary
 
 # Configure logging
 logging.basicConfig(
@@ -96,7 +101,7 @@ async def health_check():
 )
 async def send_email_endpoint(
     email_request: EmailRequest,
-    client: Client = Depends(get_current_client),
+    client_and_key: tuple = Depends(get_current_client_and_key),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -105,18 +110,54 @@ async def send_email_endpoint(
     This endpoint accepts email data in the format compatible with wp-smtp-api
     and sends it through the client's preconfigured SMTP server.
     """
-    try:
-        # Send email
-        success, message, smtp_response = await send_email(client, email_request)
+    client, api_key_id = client_and_key
 
-        # Log the email
+    try:
+        # Send email and get metrics
+        success, message, smtp_response, metrics = await send_email(client, email_request)
+
+        # Calculate temporal fields for analytics
+        sent_at = datetime.utcnow()
+        year = sent_at.year
+        quarter = get_quarter(sent_at)
+        month = sent_at.month
+        day_of_week = sent_at.weekday()  # 0 = Monday
+        hour = sent_at.hour
+
+        # Calculate attachment metrics
+        attachment_count = len(email_request.attachments) if email_request.attachments else 0
+        total_attachment_size = 0
+        if email_request.attachments:
+            for attachment in email_request.attachments:
+                # Estimate size from base64 content (approximate)
+                content = attachment.get('content', '')
+                # Base64 encoding increases size by ~33%, so decode size is len * 0.75
+                total_attachment_size += int(len(content) * 0.75)
+
+        # Log the email with full analytics
         email_log = EmailLog(
             client_id=client.id,
+            api_key_id=api_key_id,
             to_addresses=json.dumps([str(email) for email in email_request.to]),
+            to_count=len(email_request.to),
+            cc_count=len(email_request.cc) if email_request.cc else 0,
+            bcc_count=len(email_request.bcc) if email_request.bcc else 0,
             subject=email_request.subject,
             from_email=email_request.from_email or client.default_from_email or client.smtp_username,
+            content_type=email_request.content_type,
             status="sent" if success else "failed",
             error_message=None if success else message,
+            error_type=metrics.get('error_type'),
+            attachment_count=attachment_count,
+            total_attachment_size=total_attachment_size,
+            processing_time_ms=metrics.get('processing_time_ms'),
+            smtp_connection_time_ms=metrics.get('smtp_connection_time_ms'),
+            sent_at=sent_at,
+            year=year,
+            quarter=quarter,
+            month=month,
+            day_of_week=day_of_week,
+            hour=hour,
             smtp_response=smtp_response,
         )
         db.add(email_log)
@@ -372,6 +413,194 @@ async def delete_api_key(
     logger.info(f"Deactivated API key ID: {api_key_id}")
 
     return None
+
+
+# ============================================================================
+# Analytics Endpoints
+# ============================================================================
+
+@app.get(
+    "/api/analytics/summary",
+    response_model=AnalyticsSummary,
+    summary="Get analytics summary",
+    description="Get comprehensive analytics summary for a period",
+)
+async def get_analytics_summary_endpoint(
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+    days: int = 30,
+):
+    """
+    Get analytics summary for the authenticated client.
+
+    Args:
+        days: Number of days to include in the summary (default: 30)
+    """
+    from datetime import timedelta
+
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=days)
+
+    summary = await get_analytics_summary(
+        db=db,
+        client_id=client.id,
+        start_date=start_date,
+        end_date=end_date
+    )
+
+    return summary
+
+
+@app.get(
+    "/api/analytics/snapshots",
+    response_model=list[AnalyticsSnapshotResponse],
+    summary="Get analytics snapshots",
+    description="Get quarterly analytics snapshots for a client",
+)
+async def get_snapshots_endpoint(
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+    limit: int = 10,
+):
+    """
+    Get analytics snapshots for the authenticated client.
+
+    Returns the most recent quarterly/monthly snapshots.
+    """
+    result = await db.execute(
+        select(AnalyticsSnapshot)
+        .where(AnalyticsSnapshot.client_id == client.id)
+        .order_by(AnalyticsSnapshot.year.desc(), AnalyticsSnapshot.quarter.desc())
+        .limit(limit)
+    )
+    snapshots = result.scalars().all()
+
+    return [AnalyticsSnapshotResponse.model_validate(s) for s in snapshots]
+
+
+@app.post(
+    "/api/analytics/snapshot/create",
+    response_model=AnalyticsSnapshotResponse,
+    summary="Create analytics snapshot",
+    description="Manually create an analytics snapshot for the current quarter",
+)
+async def create_snapshot_endpoint(
+    client: Client = Depends(get_current_client),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Create an analytics snapshot for the authenticated client's current quarter.
+    """
+    from app.analytics_service import get_current_quarter
+
+    year, quarter = get_current_quarter()
+    snapshot = await calculate_analytics_snapshot(
+        db=db,
+        client_id=client.id,
+        year=year,
+        quarter=quarter
+    )
+
+    return AnalyticsSnapshotResponse.model_validate(snapshot)
+
+
+# ============================================================================
+# Admin Analytics Endpoints
+# ============================================================================
+
+@app.get(
+    "/api/admin/analytics/summary",
+    response_model=AnalyticsSummary,
+    summary="Get global analytics summary",
+    description="Get analytics summary across all clients (admin only)",
+)
+async def get_global_analytics_endpoint(
+    db: AsyncSession = Depends(get_db),
+    days: int = 30,
+):
+    """
+    Get global analytics summary across all clients.
+
+    In production, this should be protected with admin authentication.
+    """
+    from datetime import timedelta
+
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=days)
+
+    summary = await get_analytics_summary(
+        db=db,
+        start_date=start_date,
+        end_date=end_date
+    )
+
+    return summary
+
+
+@app.post(
+    "/api/admin/analytics/rotate",
+    response_model=list[RotationSummary],
+    summary="Rotate old quarters",
+    description="Manually trigger quarterly data rotation (admin only)",
+)
+async def rotate_quarters_endpoint(
+    db: AsyncSession = Depends(get_db),
+    keep_quarters: int = 2,
+):
+    """
+    Manually trigger quarterly data rotation.
+
+    This will archive email logs older than the specified number of quarters
+    and create analytics snapshots.
+
+    In production, this should be protected with admin authentication.
+
+    Args:
+        keep_quarters: Number of recent quarters to keep (default: 2)
+    """
+    summaries = await rotate_old_quarters(db, keep_quarters)
+    return summaries
+
+
+@app.get(
+    "/api/admin/analytics/client/{client_id}",
+    response_model=AnalyticsSummary,
+    summary="Get client analytics",
+    description="Get analytics for a specific client (admin only)",
+)
+async def get_client_analytics_endpoint(
+    client_id: int,
+    db: AsyncSession = Depends(get_db),
+    days: int = 30,
+):
+    """
+    Get analytics for a specific client.
+
+    In production, this should be protected with admin authentication.
+    """
+    from datetime import timedelta
+
+    # Verify client exists
+    result = await db.execute(select(Client).where(Client.id == client_id))
+    client = result.scalar_one_or_none()
+
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Client with ID {client_id} not found"
+        )
+
+    end_date = datetime.utcnow()
+    start_date = end_date - timedelta(days=days)
+
+    summary = await get_analytics_summary(
+        db=db,
+        client_id=client_id,
+        start_date=start_date,
+        end_date=end_date
+    )
+
+    return summary
 
 
 # Exception handlers

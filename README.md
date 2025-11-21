@@ -238,6 +238,197 @@ python manage.py list-api-keys
 python manage.py create-api-key
 ```
 
+### Analytics Commands
+
+```bash
+# View analytics summary for a client
+python manage.py show-analytics
+
+# Create analytics snapshot for current quarter
+python manage.py create-snapshot
+
+# Rotate old quarterly data (archive and cleanup)
+python manage.py rotate-data
+```
+
+## Analytics & Data Retention
+
+### Overview
+
+The SMTP Proxy includes comprehensive analytics tracking with automatic quarterly data rotation. This ensures you have detailed insights while managing database growth.
+
+### Tracked Metrics
+
+#### Email Volume Metrics
+- Total emails sent/failed
+- Success/failure rates
+- Emails per hour/day/month
+- Peak usage times
+
+#### Performance Metrics
+- Average processing time
+- SMTP connection time
+- P95/P99 latency percentiles
+- Performance trends over time
+
+#### Recipient Analytics
+- Number of recipients (TO, CC, BCC)
+- Distribution patterns
+- Peak recipient counts
+
+#### Attachment Metrics
+- Total attachments sent
+- Attachment sizes
+- Emails with attachments
+- Storage usage
+
+#### Error Analytics
+- Error types and frequencies
+- Error distribution by time
+- Most common failure reasons
+- Error trends
+
+### Quarterly Data Rotation
+
+The system automatically manages data using a **quarterly rotation** strategy:
+
+#### How It Works
+
+1. **Active Data**: Current quarter + 2 previous quarters (configurable)
+2. **Archival**: Older quarters are archived with anonymized data
+3. **Snapshots**: Aggregated analytics are saved before archival
+4. **Cleanup**: Detailed logs are removed after archiving
+
+#### Rotation Process
+
+```
+Q1 2024 (Active)  → Detailed logs in email_logs table
+Q4 2023 (Active)  → Detailed logs in email_logs table
+Q3 2023 (Active)  → Detailed logs in email_logs table
+Q2 2023 (Archive) → Anonymized data in archived_email_logs
+Q1 2023 (Archive) → Anonymized data in archived_email_logs
+```
+
+#### Archived Data
+
+Archived data includes:
+- Statistical summaries (counts, averages, percentages)
+- Temporal patterns (hour/day distributions)
+- Performance metrics
+- Error distributions
+- **Excludes**: Email addresses, subjects, content
+
+#### Manual Rotation
+
+```bash
+# Rotate data keeping only last 2 quarters
+python manage.py rotate-data
+
+# Specify number of quarters to keep
+# (script will prompt)
+```
+
+#### Automated Rotation
+
+You can set up a cron job for automatic rotation:
+
+```bash
+# Run quarterly rotation on the first day of each quarter
+0 0 1 1,4,7,10 * cd /path/to/app && python manage.py rotate-data
+```
+
+### Analytics Endpoints
+
+#### Client Analytics (Authenticated)
+
+```bash
+# Get analytics summary for your client (last 30 days)
+GET /api/analytics/summary?days=30
+
+# Get quarterly snapshots
+GET /api/analytics/snapshots?limit=10
+
+# Create snapshot for current quarter
+POST /api/analytics/snapshot/create
+```
+
+**Example Response:**
+
+```json
+{
+  "period": "2024-01-01 to 2024-01-31",
+  "total_emails": 1500,
+  "total_sent": 1485,
+  "total_failed": 15,
+  "success_rate": 99.0,
+  "avg_processing_time_ms": 245.5,
+  "daily_metrics": [
+    {
+      "date": "2024-01-01",
+      "total_emails": 50,
+      "success_rate": 98.0
+    }
+  ],
+  "hourly_distribution": [
+    {"hour": 9, "email_count": 150},
+    {"hour": 14, "email_count": 200}
+  ],
+  "top_errors": [
+    {
+      "error_type": "SMTPAuthenticationError",
+      "count": 10,
+      "percentage": 66.7
+    }
+  ]
+}
+```
+
+#### Admin Analytics Endpoints
+
+```bash
+# Global analytics across all clients
+GET /api/admin/analytics/summary?days=30
+
+# Analytics for specific client
+GET /api/admin/analytics/client/{client_id}?days=30
+
+# Trigger manual rotation
+POST /api/admin/analytics/rotate?keep_quarters=2
+```
+
+### Database Schema
+
+#### email_logs (Active Data)
+- Full email details with analytics
+- Current quarter + 2 previous quarters
+- Indexed for fast queries
+
+#### archived_email_logs (Historical Data)
+- Anonymized email data
+- Quarters older than retention window
+- Statistical data only
+
+#### analytics_snapshots (Aggregated Metrics)
+- Quarterly/monthly summaries
+- Pre-calculated metrics
+- Long-term trend analysis
+
+### Data Privacy
+
+The rotation process ensures privacy:
+- Email subjects are hashed (SHA256)
+- Email addresses are removed
+- Content is not archived
+- Only statistical data is retained
+
+### Performance Optimization
+
+Analytics are optimized through:
+- Database indexes on temporal fields
+- Quarterly partitioning strategy
+- Aggregated snapshots for fast queries
+- Automatic cleanup of old data
+
 ## API Endpoints
 
 ### Public Endpoints

@@ -8,6 +8,10 @@ from app.database import AsyncSessionLocal, init_db
 from app.schemas import Client, APIKey
 from app.auth import create_api_key
 from app.config import settings
+from app.analytics_service import (
+    get_current_quarter, calculate_analytics_snapshot,
+    rotate_old_quarters, get_analytics_summary
+)
 
 
 async def create_client_cli():
@@ -165,6 +169,138 @@ async def list_api_keys_cli():
                 print(f"    Expires: {api_key.expires_at}")
 
 
+async def create_snapshot_cli():
+    """Create analytics snapshot for a client."""
+    print("\n=== Create Analytics Snapshot ===\n")
+
+    async with AsyncSessionLocal() as db:
+        # List clients
+        result = await db.execute(select(Client).order_by(Client.id))
+        clients = result.scalars().all()
+
+        if not clients:
+            print("❌ No clients found.")
+            return
+
+        print("Available clients:")
+        for client in clients:
+            print(f"  {client.id}: {client.name}")
+
+        client_id = int(input("\nClient ID (or 0 for all): ").strip())
+
+        year, quarter = get_current_quarter()
+        print(f"\nCurrent quarter: {year}-Q{quarter}")
+
+        if client_id == 0:
+            # Create snapshots for all clients
+            for client in clients:
+                snapshot = await calculate_analytics_snapshot(db, client.id, year, quarter)
+                print(f"✅ Snapshot created for {client.name}: {snapshot.total_emails} emails")
+        else:
+            # Create snapshot for specific client
+            result = await db.execute(select(Client).where(Client.id == client_id))
+            client = result.scalar_one_or_none()
+
+            if not client:
+                print(f"\n❌ Error: Client with ID {client_id} not found!")
+                return
+
+            snapshot = await calculate_analytics_snapshot(db, client_id, year, quarter)
+            print(f"\n✅ Snapshot created!")
+            print(f"   Total Emails: {snapshot.total_emails}")
+            print(f"   Success Rate: {snapshot.success_rate:.2f}%")
+            print(f"   Period: {year}-Q{quarter}")
+
+
+async def rotate_data_cli():
+    """Rotate old quarterly data."""
+    print("\n=== Quarterly Data Rotation ===\n")
+
+    keep_quarters = int(input("Number of recent quarters to keep [2]: ").strip() or "2")
+
+    print(f"\nThis will archive all data older than {keep_quarters} quarters.")
+    confirm = input("Continue? [y/N]: ").strip().lower()
+
+    if confirm != 'y':
+        print("Aborted.")
+        return
+
+    async with AsyncSessionLocal() as db:
+        summaries = await rotate_old_quarters(db, keep_quarters)
+
+        if not summaries:
+            print("\n✅ No data to rotate. All quarters are within the keep window.")
+        else:
+            print(f"\n✅ Rotation completed!")
+            for summary in summaries:
+                print(f"\n  Quarter: {summary.quarter}")
+                print(f"    Archived: {summary.emails_archived} emails")
+                print(f"    Deleted: {summary.emails_deleted} emails")
+                print(f"    Snapshot created: {'Yes' if summary.snapshot_created else 'No'}")
+
+
+async def show_analytics_cli():
+    """Show analytics summary for a client."""
+    print("\n=== Analytics Summary ===\n")
+
+    async with AsyncSessionLocal() as db:
+        # List clients
+        result = await db.execute(select(Client).order_by(Client.id))
+        clients = result.scalars().all()
+
+        if not clients:
+            print("❌ No clients found.")
+            return
+
+        print("Available clients:")
+        for client in clients:
+            print(f"  {client.id}: {client.name}")
+
+        client_id = int(input("\nClient ID: ").strip())
+
+        result = await db.execute(select(Client).where(Client.id == client_id))
+        client = result.scalar_one_or_none()
+
+        if not client:
+            print(f"\n❌ Error: Client with ID {client_id} not found!")
+            return
+
+        days = int(input("Number of days to analyze [30]: ").strip() or "30")
+
+        from datetime import timedelta
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
+
+        summary = await get_analytics_summary(db, client_id, start_date, end_date)
+
+        print(f"\n📊 Analytics for {client.name}")
+        print(f"   Period: {summary.period}")
+        print(f"\n   📧 Email Volume")
+        print(f"      Total: {summary.total_emails}")
+        print(f"      Sent: {summary.total_sent}")
+        print(f"      Failed: {summary.total_failed}")
+        print(f"      Success Rate: {summary.success_rate:.2f}%")
+
+        print(f"\n   ⚡ Performance")
+        print(f"      Avg Processing Time: {summary.avg_processing_time_ms:.2f}ms")
+        if summary.p95_processing_time_ms:
+            print(f"      P95 Processing Time: {summary.p95_processing_time_ms:.2f}ms")
+        if summary.p99_processing_time_ms:
+            print(f"      P99 Processing Time: {summary.p99_processing_time_ms:.2f}ms")
+
+        print(f"\n   📎 Attachments")
+        print(f"      Total Attachments: {summary.total_attachments}")
+        print(f"      Emails with Attachments: {summary.emails_with_attachments}")
+        print(f"      Total Size: {summary.total_attachment_bytes / 1024 / 1024:.2f} MB")
+
+        if summary.top_errors:
+            print(f"\n   ❌ Top Errors")
+            for error in summary.top_errors[:5]:
+                print(f"      {error.error_type}: {error.count} ({error.percentage:.1f}%)")
+
+        print()
+
+
 async def main():
     """Main CLI entry point."""
     # Initialize database
@@ -173,11 +309,16 @@ async def main():
     if len(sys.argv) < 2:
         print("\nFastAPI SMTP Proxy - Management CLI")
         print("\nUsage: python manage.py <command>")
-        print("\nCommands:")
-        print("  create-client    Create a new client")
-        print("  list-clients     List all clients")
-        print("  create-api-key   Create a new API key")
-        print("  list-api-keys    List all API keys")
+        print("\nClient Management:")
+        print("  create-client     Create a new client")
+        print("  list-clients      List all clients")
+        print("\nAPI Key Management:")
+        print("  create-api-key    Create a new API key")
+        print("  list-api-keys     List all API keys")
+        print("\nAnalytics:")
+        print("  create-snapshot   Create analytics snapshot")
+        print("  show-analytics    Show analytics summary")
+        print("  rotate-data       Rotate old quarterly data")
         print()
         sys.exit(1)
 
@@ -191,6 +332,12 @@ async def main():
         await create_api_key_cli()
     elif command == "list-api-keys":
         await list_api_keys_cli()
+    elif command == "create-snapshot":
+        await create_snapshot_cli()
+    elif command == "show-analytics":
+        await show_analytics_cli()
+    elif command == "rotate-data":
+        await rotate_data_cli()
     else:
         print(f"❌ Unknown command: {command}")
         sys.exit(1)

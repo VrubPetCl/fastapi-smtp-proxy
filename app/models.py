@@ -1,6 +1,6 @@
 """Pydantic models for API request/response validation."""
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import List, Optional
+from typing import List, Optional, Dict
 from datetime import datetime
 
 
@@ -128,3 +128,137 @@ class APIKeyResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ============================================================================
+# Analytics Models
+# ============================================================================
+
+class AnalyticsSnapshotResponse(BaseModel):
+    """Analytics snapshot response model."""
+
+    id: int
+    client_id: int
+    year: int
+    quarter: int
+    month: Optional[int]
+
+    # Volume metrics
+    total_emails: int
+    total_sent: int
+    total_failed: int
+    success_rate: float
+
+    # Recipient metrics
+    total_recipients: int
+    total_cc: int
+    total_bcc: int
+
+    # Attachment metrics
+    emails_with_attachments: int
+    total_attachments: int
+    total_attachment_bytes: int
+    avg_attachment_size: float
+
+    # Performance metrics
+    avg_processing_time_ms: float
+    avg_smtp_connection_time_ms: float
+    max_processing_time_ms: float
+    min_processing_time_ms: float
+
+    # Content type distribution
+    html_emails: int
+    plain_text_emails: int
+
+    # Peak usage metrics
+    peak_hour: Optional[int]
+    peak_day: Optional[int]
+    peak_emails_in_hour: int
+
+    # Error analytics
+    error_types_json: Optional[str]
+
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class QuarterlyAnalytics(BaseModel):
+    """Quarterly analytics summary."""
+
+    year: int
+    quarter: int
+    client_name: str
+    total_emails: int
+    success_rate: float
+    total_recipients: int
+    avg_processing_time_ms: float
+
+
+class DailyMetrics(BaseModel):
+    """Daily email metrics."""
+
+    date: str  # YYYY-MM-DD
+    total_emails: int
+    total_sent: int
+    total_failed: int
+    success_rate: float
+
+
+class HourlyDistribution(BaseModel):
+    """Hourly distribution of emails."""
+
+    hour: int  # 0-23
+    email_count: int
+
+
+class ErrorDistribution(BaseModel):
+    """Error type distribution."""
+
+    error_type: str
+    count: int
+    percentage: float
+
+
+class AnalyticsSummary(BaseModel):
+    """Comprehensive analytics summary."""
+
+    # Time period
+    period: str
+    start_date: datetime
+    end_date: datetime
+
+    # Overall metrics
+    total_emails: int
+    total_sent: int
+    total_failed: int
+    success_rate: float
+
+    # Volume trends
+    daily_metrics: List[DailyMetrics]
+    hourly_distribution: List[HourlyDistribution]
+
+    # Performance
+    avg_processing_time_ms: float
+    p95_processing_time_ms: Optional[float]
+    p99_processing_time_ms: Optional[float]
+
+    # Top errors
+    top_errors: List[ErrorDistribution]
+
+    # Attachments
+    total_attachments: int
+    total_attachment_bytes: int
+    emails_with_attachments: int
+
+
+class RotationSummary(BaseModel):
+    """Summary of quarterly rotation operation."""
+
+    quarter: str  # "2024-Q1"
+    emails_archived: int
+    emails_deleted: int
+    snapshot_created: bool
+    archived_at: datetime

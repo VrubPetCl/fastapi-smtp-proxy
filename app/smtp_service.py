@@ -1,11 +1,12 @@
 """SMTP email sending service."""
 import base64
 import logging
+import time
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
-from typing import Optional, List
+from typing import Optional, List, Tuple, Dict
 import aiosmtplib
 from app.schemas import Client
 from app.models import EmailRequest
@@ -31,7 +32,7 @@ class SMTPService:
         self.use_tls = client.smtp_use_tls
         self.use_ssl = client.smtp_use_ssl
 
-    async def send_email(self, email_request: EmailRequest) -> tuple[bool, str, Optional[str]]:
+    async def send_email(self, email_request: EmailRequest) -> Tuple[bool, str, Optional[str], Dict]:
         """
         Send an email via SMTP.
 
@@ -39,31 +40,60 @@ class SMTPService:
             email_request: EmailRequest model containing email details
 
         Returns:
-            tuple: (success: bool, message: str, smtp_response: Optional[str])
+            tuple: (success: bool, message: str, smtp_response: Optional[str], metrics: dict)
+                metrics contains: processing_time_ms, smtp_connection_time_ms, error_type
         """
+        start_time = time.time()
+        metrics = {
+            'processing_time_ms': 0.0,
+            'smtp_connection_time_ms': 0.0,
+            'error_type': None
+        }
+
         try:
             # Create message
             message = self._create_message(email_request)
 
-            # Connect and send
+            # Connect and send (track SMTP time)
+            smtp_start = time.time()
             smtp_response = await self._send_via_smtp(message, email_request.to)
+            smtp_end = time.time()
+
+            metrics['smtp_connection_time_ms'] = (smtp_end - smtp_start) * 1000
 
             logger.info(
                 f"Email sent successfully to {', '.join(email_request.to)} "
                 f"via {self.client.name}"
             )
 
-            return True, "Email sent successfully", smtp_response
+            # Calculate total processing time
+            end_time = time.time()
+            metrics['processing_time_ms'] = (end_time - start_time) * 1000
+
+            return True, "Email sent successfully", smtp_response, metrics
 
         except aiosmtplib.SMTPException as e:
             error_msg = f"SMTP error: {str(e)}"
+            error_type = type(e).__name__
+            metrics['error_type'] = error_type
             logger.error(f"Failed to send email via {self.client.name}: {error_msg}")
-            return False, error_msg, None
+            # Calculate total processing time
+            end_time = time.time()
+            metrics['processing_time_ms'] = (end_time - start_time) * 1000
+
+            return False, error_msg, None, metrics
 
         except Exception as e:
             error_msg = f"Unexpected error: {str(e)}"
+            error_type = type(e).__name__
+            metrics['error_type'] = error_type
             logger.error(f"Failed to send email via {self.client.name}: {error_msg}")
-            return False, error_msg, None
+
+            # Calculate total processing time
+            end_time = time.time()
+            metrics['processing_time_ms'] = (end_time - start_time) * 1000
+
+            return False, error_msg, None, metrics
 
     def _create_message(self, email_request: EmailRequest) -> MIMEMultipart:
         """
@@ -221,7 +251,7 @@ class SMTPService:
                 pass
 
 
-async def send_email(client: Client, email_request: EmailRequest) -> tuple[bool, str, Optional[str]]:
+async def send_email(client: Client, email_request: EmailRequest) -> Tuple[bool, str, Optional[str], Dict]:
     """
     Helper function to send an email.
 
@@ -230,7 +260,7 @@ async def send_email(client: Client, email_request: EmailRequest) -> tuple[bool,
         email_request: EmailRequest model
 
     Returns:
-        tuple: (success: bool, message: str, smtp_response: Optional[str])
+        tuple: (success: bool, message: str, smtp_response: Optional[str], metrics: dict)
     """
     service = SMTPService(client)
     return await service.send_email(email_request)

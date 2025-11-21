@@ -2,7 +2,7 @@
 import jwt
 import hashlib
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Tuple
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -161,3 +161,80 @@ async def get_current_client(
     logger.info(f"Client authenticated: {client.name} (ID: {client.id})")
 
     return client
+
+
+async def get_current_client_and_key(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: AsyncSession = Depends(get_db)
+) -> Tuple[Client, int]:
+    """
+    Dependency to get the current authenticated client and API key ID.
+
+    Args:
+        credentials: HTTP Bearer credentials
+        db: Database session
+
+    Returns:
+        Tuple[Client, int]: The authenticated client and API key ID
+
+    Raises:
+        HTTPException: If authentication fails
+    """
+    token = credentials.credentials
+
+    # Verify JWT token
+    payload = verify_jwt_token(token)
+
+    client_id = payload.get("client_id")
+    if not client_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token: missing client_id"
+        )
+
+    # Create hash of the token
+    key_hash = hashlib.sha256(token.encode()).hexdigest()
+
+    # Verify API key exists and is active
+    result = await db.execute(
+        select(APIKey)
+        .where(APIKey.key_hash == key_hash)
+        .where(APIKey.client_id == client_id)
+        .where(APIKey.is_active == True)
+    )
+    api_key = result.scalar_one_or_none()
+
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or inactive API key"
+        )
+
+    # Check if API key has expired
+    if api_key.expires_at and api_key.expires_at < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key has expired"
+        )
+
+    # Get client
+    result = await db.execute(
+        select(Client)
+        .where(Client.id == client_id)
+        .where(Client.is_active == True)
+    )
+    client = result.scalar_one_or_none()
+
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Client not found or inactive"
+        )
+
+    # Update last_used_at timestamp
+    api_key.last_used_at = datetime.utcnow()
+    await db.commit()
+
+    logger.info(f"Client authenticated: {client.name} (ID: {client.id})")
+
+    return client, api_key.id
