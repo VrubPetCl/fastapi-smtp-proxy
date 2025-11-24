@@ -1232,3 +1232,76 @@ async def admin_root(request: Request):
     if session.get("admin_id"):
         return RedirectResponse(url="/admin/dashboard", status_code=302)
     return RedirectResponse(url="/admin/login", status_code=302)
+
+
+@router.get("/admin/debug/turnstile", response_class=HTMLResponse)
+async def debug_turnstile(request: Request):
+    """Debug endpoint to verify Turnstile configuration."""
+    from fastapi.responses import HTMLResponse
+
+    html_content = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Turnstile Debug</title>
+        <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    </head>
+    <body style="font-family: Arial; max-width: 800px; margin: 50px auto; padding: 20px;">
+        <h1>Cloudflare Turnstile Debug Page</h1>
+
+        <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h2>Configuration Status:</h2>
+            <ul>
+                <li><strong>Turnstile Enabled:</strong> {settings.turnstile_enabled}</li>
+                <li><strong>Site Key:</strong> {settings.cf_turnstile_site_key or '(not set)'}</li>
+                <li><strong>Secret Key:</strong> {'(set)' if settings.cf_turnstile_secret_key else '(not set)'}</li>
+            </ul>
+        </div>
+
+        <div style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h2>Turnstile Widget Test:</h2>
+            <p>The widget should appear below:</p>
+            <div class="cf-turnstile"
+                 data-sitekey="{settings.cf_turnstile_site_key or 'NO-KEY-SET'}"
+                 data-theme="light"
+                 data-callback="onSuccess"></div>
+        </div>
+
+        <div style="background: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <h2>Debug Info:</h2>
+            <div id="debug">Waiting for widget...</div>
+        </div>
+
+        <script>
+            function onSuccess(token) {{
+                document.getElementById('debug').innerHTML =
+                    '<span style="color: green;">✓ Widget loaded successfully!</span><br>' +
+                    '<strong>Token received:</strong> ' + token.substring(0, 50) + '...';
+            }}
+
+            // Check if script loaded
+            setTimeout(function() {{
+                const widget = document.querySelector('.cf-turnstile');
+                const iframe = widget.querySelector('iframe');
+
+                if (iframe) {{
+                    document.getElementById('debug').innerHTML +=
+                        '<br><span style="color: green;">✓ Turnstile SDK loaded</span>' +
+                        '<br><span style="color: green;">✓ Widget iframe rendered</span>';
+                }} else {{
+                    document.getElementById('debug').innerHTML =
+                        '<span style="color: red;">✗ Widget did not render</span>' +
+                        '<br><strong>Possible issues:</strong>' +
+                        '<ul>' +
+                        '<li>Invalid site key</li>' +
+                        '<li>Site key domain mismatch</li>' +
+                        '<li>JavaScript error (check console)</li>' +
+                        '</ul>';
+                }}
+            }}, 3000);
+        </script>
+    </body>
+    </html>
+    """
+
+    return HTMLResponse(content=html_content)

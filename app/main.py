@@ -126,11 +126,12 @@ async def add_security_headers(request, call_next):
     # Content Security Policy
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
+        "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://challenges.cloudflare.com; "
         "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
         "img-src 'self' data:; "
         "font-src 'self'; "
-        "connect-src 'self'; "
+        "connect-src 'self' https://challenges.cloudflare.com; "
+        "frame-src https://challenges.cloudflare.com; "
         "frame-ancestors 'none';"
     )
 
