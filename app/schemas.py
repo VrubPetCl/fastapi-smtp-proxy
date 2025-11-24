@@ -45,7 +45,7 @@ class APIKey(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     client_id = Column(Integer, ForeignKey("clients.id"), nullable=False)
-    name = Column(String(255), nullable=False)  # Description/name for the key
+    name = Column(String(255), nullable=True)  # Description/name for the key (optional)
     key_hash = Column(String(255), unique=True, nullable=False, index=True)  # Hash of the JWT
 
     # Metadata
@@ -57,6 +57,21 @@ class APIKey(Base):
     # Relationships
     client = relationship("Client", back_populates="api_keys")
     email_logs = relationship("EmailLog", back_populates="api_key")
+
+    @property
+    def key_prefix(self) -> str:
+        """Get the first 8 characters of the key for display."""
+        return self.key_hash[:8] if self.key_hash else ""
+
+    @property
+    def key_suffix(self) -> str:
+        """Get the last 4 characters of the key for display."""
+        return self.key_hash[-4:] if self.key_hash else ""
+
+    @property
+    def description(self) -> str:
+        """Alias for name to match template expectations."""
+        return self.name if self.name else ""
 
 
 class EmailLog(Base):

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turnstile Test</title>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 500px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #222;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #000;
+        }
+        .debug {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .debug h3 {
+            margin-top: 0;
+        }
+        .debug pre {
+            background-color: white;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Cloudflare Turnstile Test</h1>
+    <p>This page tests the Turnstile widget rendering and form submission.</p>
+
+    <form id="testForm" onsubmit="return handleSubmit(event)">
+        <div class="form-group">
+            <label for="username">Username:</label>
+            <input type="text" id="username" name="username" value="testuser" required>
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" name="password" value="testpass" required>
+        </div>
+
+        <div class="form-group">
+            <label>Captcha (should appear below):</label>
+            <!-- Replace YOUR_SITE_KEY with actual site key -->
+            <div class="cf-turnstile"
+                 data-sitekey="1x00000000000000000000AA"
+                 data-theme="light"
+                 data-callback="onTurnstileSuccess"></div>
+        </div>
+
+        <button type="submit">Submit Form</button>
+    </form>
+
+    <div class="debug">
+        <h3>Debug Information:</h3>
+        <div id="status">Waiting for form submission...</div>
+        <h4>Form Data Preview:</h4>
+        <pre id="formData">No data yet</pre>
+        <h4>Instructions:</h4>
+        <ol>
+            <li>Replace <code>data-sitekey</code> with your actual Cloudflare Turnstile site key</li>
+            <li>The widget should render above the submit button</li>
+            <li>Complete the challenge (if shown)</li>
+            <li>Click Submit to see form data including <code>cf-turnstile-response</code></li>
+        </ol>
+    </div>
+
+    <script>
+        function onTurnstileSuccess(token) {
+            console.log('Turnstile completed successfully');
+            console.log('Token:', token);
+            document.getElementById('status').innerHTML =
+                '<span style="color: green;">✓ Turnstile challenge completed</span>';
+        }
+
+        function handleSubmit(event) {
+            event.preventDefault();
+
+            const form = document.getElementById('testForm');
+            const formData = new FormData(form);
+
+            // Display all form data
+            let output = {};
+            for (let [key, value] of formData.entries()) {
+                output[key] = value;
+            }
+
+            document.getElementById('formData').textContent =
+                JSON.stringify(output, null, 2);
+
+            const hasToken = formData.has('cf-turnstile-response');
+            const tokenValue = formData.get('cf-turnstile-response');
+
+            if (hasToken && tokenValue) {
+                document.getElementById('status').innerHTML =
+                    '<span style="color: green;">✓ Form contains cf-turnstile-response token</span><br>' +
+                    '<small>Token length: ' + tokenValue.length + ' characters</small>';
+            } else {
+                document.getElementById('status').innerHTML =
+                    '<span style="color: red;">✗ Missing cf-turnstile-response token</span><br>' +
+                    '<small>Make sure to complete the Turnstile challenge before submitting</small>';
+            }
+
+            return false;
+        }
+    </script>
+</body>
+</html>
