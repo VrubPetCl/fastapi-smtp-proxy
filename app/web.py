@@ -1172,7 +1172,12 @@ async def new_api_key_page(
 
     return templates.TemplateResponse(
         "api_key_form.html",
-        {"request": request, "session": session, "client": client}
+        {
+            "request": request,
+            "session": session,
+            "client": client,
+            "now": datetime.utcnow()
+        }
     )
 
 
@@ -1180,11 +1185,12 @@ async def new_api_key_page(
 async def create_api_key(
     client_id: int,
     description: Optional[str] = Form(None),
+    expires_at: Optional[str] = Form(None),
     session: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """Generate new API key."""
-    import secrets
+    """Generate new API key using JWT tokens."""
+    from app.auth import create_api_key as create_jwt_api_key
 
     # Get client
     result = await db.execute(select(Client).where(Client.id == client_id))
@@ -1193,29 +1199,45 @@ async def create_api_key(
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
 
-    # Generate API key
-    api_key = f"smtp_{secrets.token_urlsafe(32)}"
+    # Parse expiration date if provided
+    expires_at_dt = None
+    if expires_at and expires_at.strip():
+        try:
+            expires_at_dt = datetime.strptime(expires_at, '%Y-%m-%d')
+            expires_at_dt = expires_at_dt.replace(hour=23, minute=59, second=59)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid expiration date format. Use YYYY-MM-DD")
+
+    # Generate JWT API key using the existing auth function
+    jwt_token, key_hash = create_jwt_api_key(
+        client_id=client_id,
+        key_name=description or f"API Key {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+        expires_at=expires_at_dt
+    )
 
     # Create API key record
     key_record = APIKey(
         client_id=client_id,
-        name=description,  # Use 'name' field instead of 'description'
-        key_hash=api_key,  # In production, hash this
+        name=description or f"API Key {datetime.utcnow().strftime('%Y-%m-%d %H:%M')}",
+        key_hash=key_hash,  # Store SHA256 hash of the JWT
+        expires_at=expires_at_dt,
         is_active=True
     )
 
     db.add(key_record)
     await db.commit()
 
-    # Store the new key in a secure, short-lived cookie instead of URL query parameter
+    logger.info(f"Created JWT API key for client {client.name} (ID: {client_id})")
+
+    # Store the JWT token in a secure, short-lived cookie instead of URL query parameter
     # This prevents the key from being logged in server logs, proxy logs, or browser history
     response = RedirectResponse(
         url=f"/admin/clients/{client_id}/keys",
         status_code=302
     )
 
-    # Set a short-lived, secure cookie with the new API key
-    new_key_cookie = serializer.dumps(api_key)
+    # Set a short-lived, secure cookie with the new JWT API key
+    new_key_cookie = serializer.dumps(jwt_token)
     response.set_cookie(
         key="new_api_key",
         value=new_key_cookie,
