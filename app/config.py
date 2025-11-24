@@ -32,6 +32,15 @@ class Settings(BaseSettings):
     # Security
     force_https: bool = False  # Force HTTPS redirects (for reverse proxy deployments)
 
+    # Cloudflare Turnstile (optional - if not set, captcha is disabled)
+    cf_turnstile_site_key: Optional[str] = None
+    cf_turnstile_secret_key: Optional[str] = None
+
+    @property
+    def turnstile_enabled(self) -> bool:
+        """Check if Cloudflare Turnstile is enabled."""
+        return bool(self.cf_turnstile_site_key and self.cf_turnstile_secret_key)
+
     class Config:
         env_file = ".env"
         case_sensitive = False

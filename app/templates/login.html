@@ -2,6 +2,13 @@
 
 {% block title %}Login - SMTP Proxy Admin{% endblock %}
 
+{% block extra_head %}
+{% if turnstile_enabled %}
+<!-- Cloudflare Turnstile -->
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="max-w-md w-full mx-auto px-4">
     <div class="card p-8 shadow-skeleton">
@@ -59,6 +66,13 @@
                     </a>
                 </div>
             </div>
+
+            {% if turnstile_enabled %}
+            <!-- Cloudflare Turnstile Widget -->
+            <div>
+                <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-theme="light"></div>
+            </div>
+            {% endif %}
 
             <div>
                 <button

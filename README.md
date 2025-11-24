@@ -338,6 +338,41 @@ The SMTP Proxy includes a beautiful, minimalist web dashboard for managing clien
 - **Signed Sessions**: Tamper-proof session cookies using `itsdangerous`
 - **Token Expiration**: Reset tokens expire after 24 hours
 - **HTTPOnly Cookies**: Protection against XSS attacks
+- **Cloudflare Turnstile**: Optional bot protection for login form (see below)
+
+#### Cloudflare Turnstile (Optional Bot Protection)
+
+Protect your admin login form from automated bot attacks with Cloudflare Turnstile captcha.
+
+**Setup:**
+
+1. **Get Turnstile Keys** (free):
+   - Visit: https://dash.cloudflare.com/?to=/:account/turnstile
+   - Create a new site widget
+   - Copy your Site Key and Secret Key
+
+2. **Configure Environment Variables**:
+   ```env
+   # Add to your .env file
+   CF_TURNSTILE_SITE_KEY=your_site_key_here
+   CF_TURNSTILE_SECRET_KEY=your_secret_key_here
+   ```
+
+3. **How It Works**:
+   - If both keys are set → Captcha is **required** on login
+   - If keys are not set → Captcha is **disabled** (good for dev)
+   - Turnstile automatically adapts difficulty based on threat level
+   - Most legitimate users won't even see a challenge
+
+**Features:**
+- Zero-friction for legitimate users
+- Invisible/managed challenges (not annoying like reCAPTCHA)
+- Privacy-focused (no tracking cookies)
+- Free for unlimited use
+- Works seamlessly with the existing login flow
+
+**Development Mode:**
+Simply leave the environment variables empty in your `.env` file and the captcha will be bypassed automatically. This allows for easy local development without needing to configure Turnstile.
 
 ### Customization
 

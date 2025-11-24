@@ -14,6 +14,7 @@ from app.schemas import AdminUser, Client, APIKey, EmailLog, LoginAttempt
 from app.web_auth import authenticate_admin, create_password_reset_token, reset_password, verify_reset_token
 from app.config import settings
 from app.encryption import get_encryption
+from app.turnstile import verify_turnstile_token
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +93,15 @@ async def login_page(request: Request):
     if session.get("admin_id"):
         return RedirectResponse(url="/admin/dashboard", status_code=302)
 
-    return templates.TemplateResponse("login.html", {"request": request, "session": session})
+    return templates.TemplateResponse(
+        "login.html",
+        {
+            "request": request,
+            "session": session,
+            "turnstile_enabled": settings.turnstile_enabled,
+            "turnstile_site_key": settings.cf_turnstile_site_key
+        }
+    )
 
 
 @router.post("/admin/login")
@@ -100,9 +109,44 @@ async def login(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    cf_turnstile_response: Optional[str] = Form(None, alias="cf-turnstile-response")
 ):
     """Process login form."""
+    # Cloudflare Turnstile verification (if enabled)
+    if settings.turnstile_enabled:
+        if not cf_turnstile_response:
+            logger.warning(f"Missing Turnstile token for login attempt: {username}")
+            return templates.TemplateResponse(
+                "login.html",
+                {
+                    "request": request,
+                    "session": {},
+                    "turnstile_enabled": settings.turnstile_enabled,
+                    "turnstile_site_key": settings.cf_turnstile_site_key,
+                    "error": "Captcha verification is required. Please complete the captcha."
+                },
+                status_code=400
+            )
+
+        # Verify Turnstile token
+        client_ip = request.client.host if request.client else None
+        turnstile_valid = await verify_turnstile_token(cf_turnstile_response, client_ip)
+
+        if not turnstile_valid:
+            logger.warning(f"Invalid Turnstile token for login attempt: {username} from {client_ip}")
+            return templates.TemplateResponse(
+                "login.html",
+                {
+                    "request": request,
+                    "session": {},
+                    "turnstile_enabled": settings.turnstile_enabled,
+                    "turnstile_site_key": settings.cf_turnstile_site_key,
+                    "error": "Captcha verification failed. Please try again."
+                },
+                status_code=400
+            )
+
     # Rate limiting check
     client_ip = request.client.host if request.client else "unknown"
     rate_limit_key = f"{client_ip}:{username}"
@@ -114,6 +158,8 @@ async def login(
             {
                 "request": request,
                 "session": {},
+                "turnstile_enabled": settings.turnstile_enabled,
+                "turnstile_site_key": settings.cf_turnstile_site_key,
                 "error": "Too many login attempts. Please try again in 15 minutes."
             },
             status_code=429
@@ -142,6 +188,8 @@ async def login(
             {
                 "request": request,
                 "session": {},
+                "turnstile_enabled": settings.turnstile_enabled,
+                "turnstile_site_key": settings.cf_turnstile_site_key,
                 "error": "Invalid username or password"
             },
             status_code=400
