@@ -173,7 +173,7 @@ async def login(
         key="session",
         value=session_cookie,
         httponly=True,  # Prevent JavaScript access (XSS protection)
-        secure=True,    # HTTPS only (MITM protection)
+        secure=settings.force_https,  # HTTPS only when force_https is enabled (MITM protection)
         samesite="lax", # CSRF protection
         max_age=7200    # 2 hours (reduced from 7 days)
     )

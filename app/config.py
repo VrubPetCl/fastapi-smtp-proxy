@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: Optional[str] = None  # Comma-separated list of allowed origins
 
+    # Security
+    force_https: bool = False  # Force HTTPS redirects (for reverse proxy deployments)
+
     class Config:
         env_file = ".env"
         case_sensitive = False

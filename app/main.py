@@ -4,7 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from datetime import datetime
@@ -70,6 +70,42 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Specific methods only
     allow_headers=["Content-Type", "Authorization", "X-API-Key"],  # Specific headers only
 )
+
+
+# HTTPS redirect middleware (for reverse proxy deployments)
+@app.middleware("http")
+async def force_https_middleware(request: Request, call_next):
+    """
+    Force HTTPS redirects when running behind a reverse proxy.
+
+    This middleware checks for common reverse proxy headers to determine
+    if the original request was made over HTTP, and redirects to HTTPS if needed.
+    """
+    if settings.force_https:
+        # Check reverse proxy headers to determine the original protocol
+        # Common headers set by reverse proxies:
+        # - X-Forwarded-Proto: original protocol (http/https)
+        # - X-Forwarded-Ssl: on if HTTPS
+        # - X-Scheme: original scheme
+        forwarded_proto = request.headers.get("x-forwarded-proto", "").lower()
+        forwarded_ssl = request.headers.get("x-forwarded-ssl", "").lower()
+        x_scheme = request.headers.get("x-scheme", "").lower()
+
+        # Determine if the original request was not HTTPS
+        is_http = (
+            forwarded_proto == "http" or
+            forwarded_ssl == "off" or
+            x_scheme == "http"
+        )
+
+        # Only redirect GET requests to avoid losing POST data
+        if is_http and request.method == "GET":
+            # Construct HTTPS URL
+            url = request.url.replace(scheme="https")
+            return RedirectResponse(url=str(url), status_code=301)
+
+    response = await call_next(request)
+    return response
 
 
 # Security headers middleware
