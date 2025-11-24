@@ -1127,10 +1127,18 @@ async def client_keys(
     )
     api_keys = result.scalars().all()
 
-    # Check if we just created a new key (passed via query param)
-    new_api_key = request.query_params.get("new_key")
+    # Check if we just created a new key (passed via session cookie, not query param)
+    new_api_key_cookie = request.cookies.get("new_api_key")
+    new_api_key = None
+    if new_api_key_cookie:
+        try:
+            # Decrypt the new API key from the session cookie
+            new_api_key = serializer.loads(new_api_key_cookie, max_age=60)  # Only valid for 60 seconds
+        except Exception:
+            # Cookie expired or invalid
+            pass
 
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         "client_keys.html",
         {
             "request": request,
@@ -1140,6 +1148,12 @@ async def client_keys(
             "new_api_key": new_api_key
         }
     )
+
+    # Clear the one-time cookie after displaying it
+    if new_api_key_cookie:
+        response.delete_cookie("new_api_key")
+
+    return response
 
 
 @router.get("/admin/clients/{client_id}/keys/new", response_class=HTMLResponse)
@@ -1193,11 +1207,25 @@ async def create_api_key(
     db.add(key_record)
     await db.commit()
 
-    # Redirect back to keys page with the new key in the URL
-    return RedirectResponse(
-        url=f"/admin/clients/{client_id}/keys?new_key={api_key}",
+    # Store the new key in a secure, short-lived cookie instead of URL query parameter
+    # This prevents the key from being logged in server logs, proxy logs, or browser history
+    response = RedirectResponse(
+        url=f"/admin/clients/{client_id}/keys",
         status_code=302
     )
+
+    # Set a short-lived, secure cookie with the new API key
+    new_key_cookie = serializer.dumps(api_key)
+    response.set_cookie(
+        key="new_api_key",
+        value=new_key_cookie,
+        httponly=True,  # Prevent JavaScript access
+        secure=settings.force_https,  # HTTPS only when enabled
+        samesite="strict",  # Strict CSRF protection for sensitive data
+        max_age=60  # Only valid for 60 seconds (one-time display)
+    )
+
+    return response
 
 
 @router.post("/admin/clients/{client_id}/keys/{key_id}/revoke")
