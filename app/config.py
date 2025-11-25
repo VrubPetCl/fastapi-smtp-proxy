@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     cf_turnstile_site_key: Optional[str] = None
     cf_turnstile_secret_key: Optional[str] = None
 
+    # Proxy / Real IP Detection
+    # Since firewall rules only allow Cloudflare IPs, we trust proxy headers by default
+    trust_proxy_headers: bool = True  # Trust CF-Connecting-IP, X-Forwarded-For, X-Real-IP
+
     @property
     def turnstile_enabled(self) -> bool:
         """Check if Cloudflare Turnstile is enabled."""

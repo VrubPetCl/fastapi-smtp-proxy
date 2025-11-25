@@ -15,6 +15,7 @@ from app.web_auth import authenticate_admin, create_password_reset_token, reset_
 from app.config import settings
 from app.encryption import get_encryption
 from app.turnstile import verify_turnstile_token
+from app.ip_utils import get_client_ip
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +131,7 @@ async def login(
             )
 
         # Verify Turnstile token
-        client_ip = request.client.host if request.client else None
+        client_ip = get_client_ip(request)
         turnstile_valid = await verify_turnstile_token(cf_turnstile_response, client_ip)
 
         if not turnstile_valid:
@@ -148,7 +149,7 @@ async def login(
             )
 
     # Rate limiting check
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     rate_limit_key = f"{client_ip}:{username}"
 
     if not check_rate_limit(rate_limit_key):
