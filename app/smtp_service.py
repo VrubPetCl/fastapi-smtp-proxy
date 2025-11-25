@@ -210,44 +210,23 @@ class SMTPService:
         Raises:
             aiosmtplib.SMTPException: If sending fails
         """
-        # Determine connection parameters
-        if self.use_ssl:
-            use_tls = False
-            start_tls = False
-        elif self.use_tls:
-            use_tls = False
-            start_tls = True
-        else:
-            use_tls = False
-            start_tls = False
+        # Create SMTP connection parameters
+        # use_tls=True means SSL/TLS on initial connection (implicit TLS)
+        # start_tls=True means STARTTLS after plain connection (explicit TLS)
+        smtp_params = {
+            'hostname': self.smtp_host,
+            'port': self.smtp_port,
+            'username': self.smtp_username,
+            'password': self.smtp_password,
+            'use_tls': self.use_ssl,  # SSL/TLS on connect (implicit TLS)
+            'start_tls': self.use_tls,  # STARTTLS after connect (explicit TLS)
+        }
 
-        # Create SMTP client
-        smtp = aiosmtplib.SMTP(
-            hostname=self.smtp_host,
-            port=self.smtp_port,
-            use_tls=use_tls,
-            start_tls=start_tls,
-        )
-
-        try:
-            # Connect to server
-            await smtp.connect()
-
-            # Login if credentials provided
-            if self.smtp_username and self.smtp_password:
-                await smtp.login(self.smtp_username, self.smtp_password)
-
-            # Send message
+        # Use context manager for proper connection handling
+        async with aiosmtplib.SMTP(**smtp_params) as smtp:
+            # Send message (connection, auth, and quit handled automatically)
             response = await smtp.send_message(message)
-
             return str(response)
-
-        finally:
-            # Always close connection
-            try:
-                await smtp.quit()
-            except:
-                pass
 
 
 async def send_email(client: Client, email_request: EmailRequest) -> Tuple[bool, str, Optional[str], Dict]:
