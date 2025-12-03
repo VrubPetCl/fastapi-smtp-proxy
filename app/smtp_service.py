@@ -223,13 +223,11 @@ class SMTPService:
             'start_tls': self.use_tls,  # STARTTLS after connect (explicit TLS)
         }
 
-        # Determine the envelope sender (MAIL FROM) - use preconfigured email or authenticated username
-        envelope_sender = self.client.default_from_email or self.smtp_username
-
         # Use context manager for proper connection handling
         async with aiosmtplib.SMTP(**smtp_params) as smtp:
-            # Send message with explicit sender to ensure SMTP MAIL FROM matches authenticated user
-            response = await smtp.send_message(message, sender=envelope_sender)
+            # Send message - the From header in the message will be used as MAIL FROM
+            # The From header is already set to client's preconfigured email in _create_message()
+            response = await smtp.send_message(message)
             return str(response)
 
 
