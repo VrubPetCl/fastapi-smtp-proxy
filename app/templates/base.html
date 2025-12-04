@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}SMTP Proxy Admin{% endblock %}</title>
+    <link rel="icon" type="image/png" href="/static/images/smtpproxy-logo.png">
+    <link rel="shortcut icon" type="image/png" href="/static/images/smtpproxy-logo.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -84,7 +86,10 @@
             <div class="flex justify-between h-16">
                 <div class="flex">
                     <div class="flex-shrink-0 flex items-center">
-                        <span class="text-xl font-bold text-gray-900">SMTP Proxy</span>
+                        <a href="/admin/dashboard" class="flex items-center">
+                            <img src="/static/images/smtpproxy-logo.png" alt="SMTP Proxy Logo" class="h-10 w-auto mr-2">
+                            <span class="text-xl font-bold text-gray-900">SMTP Proxy</span>
+                        </a>
                     </div>
                     <div class="hidden sm:ml-8 sm:flex sm:space-x-8">
                         <a href="/admin/dashboard" class="border-transparent {% if request.path == '/admin/dashboard' %}border-gray-900 text-gray-900{% else %}text-gray-500 hover:border-gray-300 hover:text-gray-700{% endif %} inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
