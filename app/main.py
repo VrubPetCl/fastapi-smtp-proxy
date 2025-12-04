@@ -3,11 +3,15 @@
 import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.config import settings
 from app.core.lifespan import lifespan
 from app.core.middleware import force_https_middleware, add_security_headers
 from app.core.exceptions import http_exception_handler
+from app.core.rate_limit import limiter
 from app.api.routes import health, email, clients, api_keys, analytics
 from app import web
 
@@ -26,6 +30,9 @@ app = FastAPI(
     description="FastAPI-based SMTP proxy for sending emails via preconfigured SMTP connections",
     lifespan=lifespan,
 )
+
+# Add rate limiter state to app
+app.state.limiter = limiter
 
 # Add CORS middleware
 # Configure allowed origins from environment or use secure defaults
@@ -51,6 +58,9 @@ app.add_middleware(
 app.middleware("http")(force_https_middleware)
 app.middleware("http")(add_security_headers)
 
+# Add SlowAPI middleware for rate limiting
+app.add_middleware(SlowAPIMiddleware)
+
 # Include routers
 app.include_router(health.router)
 app.include_router(email.router)
@@ -59,6 +69,21 @@ app.include_router(api_keys.router)
 app.include_router(analytics.client_router)
 app.include_router(analytics.admin_router)
 app.include_router(web.router)
+
+
+# Custom rate limit exception handler
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request, exc):
+    """Handle rate limit exceeded errors with a custom response."""
+    return JSONResponse(
+        status_code=429,
+        content={
+            "success": False,
+            "error": "Rate limit exceeded",
+            "message": str(exc.detail),
+        },
+    )
+
 
 # Exception handlers
 app.add_exception_handler(HTTPException, http_exception_handler)

@@ -14,6 +14,7 @@ from app.auth import get_current_client_and_key
 from app.smtp_service import send_email
 from app.analytics_service import get_quarter
 from app.ip_utils import get_client_ip
+from app.core.rate_limit import limiter, get_email_rate_limits
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +28,13 @@ router = APIRouter(prefix="/api", tags=["email"])
         200: {"model": EmailResponse},
         400: {"model": ErrorResponse},
         401: {"model": ErrorResponse},
+        429: {"model": ErrorResponse, "description": "Too many requests - rate limit exceeded"},
         500: {"model": ErrorResponse},
     },
     summary="Send email via SMTP",
     description="Send an email using the authenticated client's SMTP configuration",
 )
+@limiter.limit(get_email_rate_limits())
 async def send_email_endpoint(
     request: Request,
     email_request: EmailRequest,
@@ -43,12 +46,16 @@ async def send_email_endpoint(
 
     This endpoint accepts email data in the format compatible with wp-smtp-api
     and sends it through the client's preconfigured SMTP server.
+
+    Rate limits (per client):
+    - 60 emails per minute
+    - 1000 emails per hour
+    - 10000 emails per day
     """
     client, api_key_id = client_and_key
 
-    print("\n ---------------------")
-    json.dumps(email_request.model_dump(), indent="\t")
-    print("---------------------")
+    # Set client_id in request state for rate limiting
+    request.state.client_id = client.id
 
     # Capture security tracking info
     client_ip = get_client_ip(request)

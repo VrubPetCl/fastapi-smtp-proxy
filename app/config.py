@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     # Since firewall rules only allow Cloudflare IPs, we trust proxy headers by default
     trust_proxy_headers: bool = True  # Trust CF-Connecting-IP, X-Forwarded-For, X-Real-IP
 
+    # Rate Limiting
+    # Per-client rate limits for email sending
+    rate_limit_per_minute: int = 60  # emails per minute per client
+    rate_limit_per_hour: int = 1000  # emails per hour per client
+    rate_limit_per_day: int = 10000  # emails per day per client
+    # Global rate limits (across all clients)
+    global_rate_limit_per_second: int = 100  # total emails per second
+    global_rate_limit_per_minute: int = 3000  # total emails per minute
+
     @property
     def turnstile_enabled(self) -> bool:
         """Check if Cloudflare Turnstile is enabled."""
